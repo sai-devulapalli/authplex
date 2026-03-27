@@ -1,0 +1,39 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+authcore
+
+# Build output
+/bin/
+/dist/
+
+# Test
+*.test
+*.out
+coverage-*.out
+coverage.html
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Vendor (use modules)
+/vendor/
+
+# Debug
+__debug_bin*

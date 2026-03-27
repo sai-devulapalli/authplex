@@ -1,0 +1,53 @@
+run:
+  timeout: 5m
+  go: "1.22"
+
+linters:
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - revive
+    - gocritic
+    - gosec
+    - unparam
+    - unused
+    - ineffassign
+    - typecheck
+    - nilerr
+    - exhaustive
+
+linters-settings:
+  exhaustive:
+    default-signifies-exhaustive: true
+  revive:
+    rules:
+      - name: blank-imports
+      - name: context-as-argument
+      - name: error-return
+      - name: error-strings
+      - name: exported
+        disabled: true
+      - name: increment-decrement
+      - name: var-naming
+      - name: unreachable-code
+  gocritic:
+    enabled-checks:
+      - appendAssign
+      - dupArg
+      - dupBranchBody
+      - equalFold
+      - sloppyLen
+  gosec:
+    excludes:
+      - G104  # We use Result[T] pattern, not all errors need explicit check
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - gosec
+        - errcheck
+    - path: cmd/
+      linters:
+        - unparam

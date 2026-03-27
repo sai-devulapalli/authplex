@@ -1,0 +1,151 @@
+package postgres
+
+import (
+	"context"
+	"database/sql"
+	"time"
+
+	"github.com/authcore/internal/domain/client"
+	apperrors "github.com/authcore/pkg/sdk/errors"
+)
+
+// ClientRepository implements client.Repository using PostgreSQL.
+type ClientRepository struct {
+	db *sql.DB
+}
+
+// NewClientRepository creates a new PostgreSQL-backed client repository.
+func NewClientRepository(db *sql.DB) *ClientRepository {
+	return &ClientRepository{db: db}
+}
+
+var _ client.Repository = (*ClientRepository)(nil)
+
+func (r *ClientRepository) Create(ctx context.Context, c client.Client) error {
+	query := `INSERT INTO clients (id, tenant_id, client_name, client_type, secret_hash, redirect_uris, allowed_scopes, allowed_grant_types, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`
+
+	grantTypes := make([]string, len(c.AllowedGrantTypes))
+	for i, gt := range c.AllowedGrantTypes {
+		grantTypes[i] = string(gt)
+	}
+
+	_, err := r.db.ExecContext(ctx, query,
+		c.ID, c.TenantID, c.ClientName, string(c.ClientType),
+		c.SecretHash, pgArray(c.RedirectURIs), pgArray(c.AllowedScopes),
+		pgArray(grantTypes), c.CreatedAt, c.UpdatedAt,
+	)
+	if err != nil {
+		return apperrors.Wrap(apperrors.ErrInternal, "failed to create client", err)
+	}
+	return nil
+}
+
+func (r *ClientRepository) GetByID(ctx context.Context, id, tenantID string) (client.Client, error) {
+	query := `SELECT id, tenant_id, client_name, client_type, secret_hash, redirect_uris, allowed_scopes, allowed_grant_types, created_at, updated_at, deleted_at
+		FROM clients WHERE id = $1 AND tenant_id = $2`
+
+	var c client.Client
+	var clientType string
+	var redirectURIs, scopes, grantTypes []string
+	var deletedAt *time.Time
+
+	err := r.db.QueryRowContext(ctx, query, id, tenantID).Scan(
+		&c.ID, &c.TenantID, &c.ClientName, &clientType, &c.SecretHash,
+		(*pgArray)(&redirectURIs), (*pgArray)(&scopes), (*pgArray)(&grantTypes),
+		&c.CreatedAt, &c.UpdatedAt, &deletedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return client.Client{}, apperrors.New(apperrors.ErrNotFound, "client not found")
+		}
+		return client.Client{}, apperrors.Wrap(apperrors.ErrInternal, "failed to query client", err)
+	}
+
+	c.ClientType = client.ClientType(clientType)
+	c.RedirectURIs = redirectURIs
+	c.AllowedScopes = scopes
+	c.AllowedGrantTypes = toGrantTypes(grantTypes)
+	c.DeletedAt = deletedAt
+	return c, nil
+}
+
+func (r *ClientRepository) Update(ctx context.Context, c client.Client) error {
+	query := `UPDATE clients SET client_name = $1, redirect_uris = $2, allowed_scopes = $3, updated_at = $4
+		WHERE id = $5 AND tenant_id = $6 AND deleted_at IS NULL`
+
+	result, err := r.db.ExecContext(ctx, query,
+		c.ClientName, pgArray(c.RedirectURIs), pgArray(c.AllowedScopes),
+		time.Now().UTC(), c.ID, c.TenantID,
+	)
+	if err != nil {
+		return apperrors.Wrap(apperrors.ErrInternal, "failed to update client", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return apperrors.New(apperrors.ErrNotFound, "client not found")
+	}
+	return nil
+}
+
+func (r *ClientRepository) Delete(ctx context.Context, id, tenantID string) error {
+	query := `UPDATE clients SET deleted_at = $1 WHERE id = $2 AND tenant_id = $3 AND deleted_at IS NULL`
+	result, err := r.db.ExecContext(ctx, query, time.Now().UTC(), id, tenantID)
+	if err != nil {
+		return apperrors.Wrap(apperrors.ErrInternal, "failed to delete client", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return apperrors.New(apperrors.ErrNotFound, "client not found")
+	}
+	return nil
+}
+
+func (r *ClientRepository) List(ctx context.Context, tenantID string, offset, limit int) ([]client.Client, int, error) {
+	var total int
+	err := r.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM clients WHERE tenant_id = $1 AND deleted_at IS NULL`, tenantID).Scan(&total)
+	if err != nil {
+		return nil, 0, apperrors.Wrap(apperrors.ErrInternal, "failed to count clients", err)
+	}
+
+	query := `SELECT id, tenant_id, client_name, client_type, secret_hash, redirect_uris, allowed_scopes, allowed_grant_types, created_at, updated_at, deleted_at
+		FROM clients WHERE tenant_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC LIMIT $2 OFFSET $3`
+
+	rows, err := r.db.QueryContext(ctx, query, tenantID, limit, offset)
+	if err != nil {
+		return nil, 0, apperrors.Wrap(apperrors.ErrInternal, "failed to list clients", err)
+	}
+	defer rows.Close()
+
+	var clients []client.Client
+	for rows.Next() {
+		var c client.Client
+		var clientType string
+		var redirectURIs, scopes, grantTypes []string
+		var deletedAt *time.Time
+
+		if err := rows.Scan(
+			&c.ID, &c.TenantID, &c.ClientName, &clientType, &c.SecretHash,
+			(*pgArray)(&redirectURIs), (*pgArray)(&scopes), (*pgArray)(&grantTypes),
+			&c.CreatedAt, &c.UpdatedAt, &deletedAt,
+		); err != nil {
+			return nil, 0, apperrors.Wrap(apperrors.ErrInternal, "failed to scan client", err)
+		}
+		c.ClientType = client.ClientType(clientType)
+		c.RedirectURIs = redirectURIs
+		c.AllowedScopes = scopes
+		c.AllowedGrantTypes = toGrantTypes(grantTypes)
+		c.DeletedAt = deletedAt
+		clients = append(clients, c)
+	}
+
+	return clients, total, rows.Err()
+}
+
+func toGrantTypes(ss []string) []client.GrantType {
+	gts := make([]client.GrantType, len(ss))
+	for i, s := range ss {
+		gts[i] = client.GrantType(s)
+	}
+	return gts
+}
