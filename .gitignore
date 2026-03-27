@@ -4,8 +4,6 @@
 *.dll
 *.so
 *.dylib
-authcore
-
 # Build output
 /bin/
 /dist/
