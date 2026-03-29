@@ -6,15 +6,24 @@ import (
 	"encoding/base64"
 	"log/slog"
 
+	auditsvc "github.com/authcore/internal/application/audit"
+	domainaudit "github.com/authcore/internal/domain/audit"
 	"github.com/authcore/internal/domain/client"
 	apperrors "github.com/authcore/pkg/sdk/errors"
 )
 
 // Service provides OAuth client management operations.
 type Service struct {
-	repo   client.Repository
-	hasher client.SecretHasher
-	logger *slog.Logger
+	repo     client.Repository
+	hasher   client.SecretHasher
+	auditSvc *auditsvc.Service
+	logger   *slog.Logger
+}
+
+// WithAudit configures audit event logging.
+func (s *Service) WithAudit(a *auditsvc.Service) *Service {
+	s.auditSvc = a
+	return s
 }
 
 // NewService creates a new client service.
@@ -64,6 +73,9 @@ func (s *Service) Create(ctx context.Context, req CreateClientRequest) (ClientRe
 	}
 
 	s.logger.Info("client created", "client_id", c.ID, "tenant_id", c.TenantID, "type", c.ClientType)
+	if s.auditSvc != nil {
+		s.auditSvc.Log(ctx, req.TenantID, "system", "system", domainaudit.EventClientCreated, "client", c.ID, nil, nil)
+	}
 
 	return toResponse(c, plaintextSecret), nil
 }
@@ -111,6 +123,9 @@ func (s *Service) Delete(ctx context.Context, clientID, tenantID string) *apperr
 		return apperrors.Wrap(apperrors.ErrInternal, "failed to delete client", err)
 	}
 	s.logger.Info("client deleted", "client_id", clientID)
+	if s.auditSvc != nil {
+		s.auditSvc.Log(ctx, tenantID, "system", "system", domainaudit.EventClientDeleted, "client", clientID, nil, nil)
+	}
 	return nil
 }
 

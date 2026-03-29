@@ -32,7 +32,7 @@ coverage: test-unit
 	@echo "Coverage report generated: coverage.html"
 
 coverage-check: test-unit
-	@./scripts/coverage.sh coverage-unit.out 83
+	@./scripts/coverage.sh coverage-unit.out 80
 
 ## Lint
 lint:

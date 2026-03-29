@@ -62,6 +62,10 @@ func (m *mockUserHandlerRepo) Delete(_ context.Context, id, _ string) error {
 	return nil
 }
 
+func (m *mockUserHandlerRepo) IncrementTokenVersion(_ context.Context, _, _ string) error {
+	return nil
+}
+
 type mockUserSessionRepo struct {
 	sessions map[string]domainuser.Session
 }

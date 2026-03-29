@@ -6,14 +6,23 @@ import (
 	"encoding/base64"
 	"log/slog"
 
+	auditsvc "github.com/authcore/internal/application/audit"
+	domainaudit "github.com/authcore/internal/domain/audit"
 	"github.com/authcore/internal/domain/identity"
 	apperrors "github.com/authcore/pkg/sdk/errors"
 )
 
 // Service provides identity provider management operations.
 type Service struct {
-	repo   identity.ProviderRepository
-	logger *slog.Logger
+	repo     identity.ProviderRepository
+	auditSvc *auditsvc.Service
+	logger   *slog.Logger
+}
+
+// WithAudit configures audit event logging.
+func (s *Service) WithAudit(a *auditsvc.Service) *Service {
+	s.auditSvc = a
+	return s
 }
 
 // NewService creates a new provider management service.
@@ -47,6 +56,9 @@ func (s *Service) Create(ctx context.Context, req CreateProviderRequest) (Provid
 	}
 
 	s.logger.Info("identity provider created", "provider_id", p.ID, "type", p.ProviderType, "tenant_id", p.TenantID)
+	if s.auditSvc != nil {
+		s.auditSvc.Log(ctx, req.TenantID, "system", "system", domainaudit.EventProviderCreated, "provider", p.ID, nil, nil)
+	}
 	return toResponse(p), nil
 }
 
@@ -78,6 +90,9 @@ func (s *Service) Delete(ctx context.Context, id, tenantID string) *apperrors.Ap
 		return apperrors.Wrap(apperrors.ErrInternal, "failed to delete provider", err)
 	}
 	s.logger.Info("identity provider deleted", "provider_id", id)
+	if s.auditSvc != nil {
+		s.auditSvc.Log(ctx, tenantID, "system", "system", domainaudit.EventProviderDeleted, "provider", id, nil, nil)
+	}
 	return nil
 }
 

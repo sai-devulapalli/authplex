@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 
+	auditsvc "github.com/authcore/internal/application/audit"
+	domainaudit "github.com/authcore/internal/domain/audit"
 	"github.com/authcore/internal/config"
 	"github.com/authcore/internal/domain/tenant"
 	apperrors "github.com/authcore/pkg/sdk/errors"
@@ -11,8 +13,15 @@ import (
 
 // Service provides tenant management operations.
 type Service struct {
-	repo   tenant.Repository
-	logger *slog.Logger
+	repo     tenant.Repository
+	auditSvc *auditsvc.Service
+	logger   *slog.Logger
+}
+
+// WithAudit configures audit event logging.
+func (s *Service) WithAudit(a *auditsvc.Service) *Service {
+	s.auditSvc = a
+	return s
 }
 
 // NewService creates a new tenant service.
@@ -35,6 +44,9 @@ func (s *Service) Create(ctx context.Context, req CreateTenantRequest) (tenant.T
 	}
 
 	s.logger.Info("tenant created", "tenant_id", t.ID, "domain", t.Domain)
+	if s.auditSvc != nil {
+		s.auditSvc.Log(ctx, t.ID, "system", "system", domainaudit.EventTenantCreated, "tenant", t.ID, nil, nil)
+	}
 	return t, nil
 }
 
@@ -69,6 +81,9 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateTenantRequest
 	}
 
 	s.logger.Info("tenant updated", "tenant_id", t.ID)
+	if s.auditSvc != nil {
+		s.auditSvc.Log(ctx, t.ID, "system", "system", domainaudit.EventTenantUpdated, "tenant", t.ID, nil, nil)
+	}
 	return t, nil
 }
 
@@ -78,6 +93,9 @@ func (s *Service) Delete(ctx context.Context, id string) *apperrors.AppError {
 		return apperrors.Wrap(apperrors.ErrInternal, "failed to delete tenant", err)
 	}
 	s.logger.Info("tenant deleted", "tenant_id", id)
+	if s.auditSvc != nil {
+		s.auditSvc.Log(ctx, id, "system", "system", domainaudit.EventTenantDeleted, "tenant", id, nil, nil)
+	}
 	return nil
 }
 

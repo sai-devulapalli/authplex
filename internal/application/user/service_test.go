@@ -70,6 +70,16 @@ func (m *mockUserRepo) Delete(_ context.Context, id, _ string) error {
 	return nil
 }
 
+func (m *mockUserRepo) IncrementTokenVersion(_ context.Context, id, _ string) error {
+	u, ok := m.users[id]
+	if !ok {
+		return errors.New("not found")
+	}
+	u.TokenVersion++
+	m.users[id] = u
+	return nil
+}
+
 type mockSessionRepo struct {
 	sessions map[string]domainuser.Session
 }

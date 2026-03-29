@@ -44,6 +44,10 @@ func (m *mockTenantRepo) List(_ context.Context, _, _ int) ([]tenant.Tenant, int
 	return nil, 0, nil
 }
 
+func (m *mockTenantRepo) IncrementTokenVersion(_ context.Context, _ string) error {
+	return nil
+}
+
 // --- Tests ---
 
 func TestTenantResolver_HeaderMode_Success(t *testing.T) {

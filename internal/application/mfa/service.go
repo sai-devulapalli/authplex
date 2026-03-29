@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/authcore/internal/application/auth"
+	auditsvc "github.com/authcore/internal/application/audit"
+	domainaudit "github.com/authcore/internal/domain/audit"
 	domainmfa "github.com/authcore/internal/domain/mfa"
 	apperrors "github.com/authcore/pkg/sdk/errors"
 	"github.com/go-webauthn/webauthn/protocol"
@@ -43,6 +45,7 @@ type Service struct {
 	challengeRepo domainmfa.ChallengeRepository
 	webauthnRepo  domainmfa.WebAuthnRepository
 	authSvc       *auth.Service
+	auditSvc      *auditsvc.Service
 	logger        *slog.Logger
 	challengeTTL  time.Duration
 	// WebAuthn relying party configuration
@@ -65,6 +68,12 @@ func NewService(
 		logger:        logger,
 		challengeTTL:  5 * time.Minute,
 	}
+}
+
+// WithAudit configures audit event logging.
+func (s *Service) WithAudit(a *auditsvc.Service) *Service {
+	s.auditSvc = a
+	return s
 }
 
 // EnrollTOTP generates a new TOTP secret for the user.
@@ -107,6 +116,9 @@ func (s *Service) EnrollTOTP(ctx context.Context, req EnrollRequest) (EnrollResp
 	otpauthURI := domainmfa.BuildOTPAuthURI("AuthCore", req.Subject, encodedSecret)
 
 	s.logger.Info("TOTP enrollment initiated", "subject", req.Subject, "tenant_id", req.TenantID)
+	if s.auditSvc != nil {
+		s.auditSvc.Log(ctx, req.TenantID, req.Subject, "user", domainaudit.EventMFAEnrolled, "mfa", req.Subject, nil, map[string]any{"method": "totp"})
+	}
 
 	return EnrollResponse{
 		Secret:     encodedSecret,
@@ -196,6 +208,9 @@ func (s *Service) VerifyMFA(ctx context.Context, req MFAVerifyRequest) (auth.Aut
 	s.challengeRepo.Delete(ctx, req.ChallengeID) //nolint:errcheck
 
 	s.logger.Info("MFA verified, auth code issued", "subject", challenge.Subject)
+	if s.auditSvc != nil {
+		s.auditSvc.Log(ctx, challenge.TenantID, challenge.Subject, "user", domainaudit.EventMFAVerified, "mfa", challenge.Subject, nil, nil)
+	}
 	return resp, nil
 }
 

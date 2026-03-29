@@ -91,3 +91,15 @@ func (r *InMemoryUserRepository) Delete(_ context.Context, id, tenantID string) 
 	delete(r.users, id)
 	return nil
 }
+
+func (r *InMemoryUserRepository) IncrementTokenVersion(_ context.Context, id, tenantID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	u, ok := r.users[id]
+	if !ok || u.TenantID != tenantID {
+		return apperrors.New(apperrors.ErrNotFound, "user not found")
+	}
+	u.TokenVersion++
+	r.users[id] = u
+	return nil
+}

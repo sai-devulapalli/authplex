@@ -10,4 +10,5 @@ type Repository interface {
 	Update(ctx context.Context, tenant Tenant) error
 	Delete(ctx context.Context, id string) error
 	List(ctx context.Context, offset, limit int) ([]Tenant, int, error)
+	IncrementTokenVersion(ctx context.Context, id string) error
 }

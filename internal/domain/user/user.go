@@ -16,6 +16,7 @@ type User struct {
 	EmailVerified bool
 	PhoneVerified bool
 	Enabled       bool
+	TokenVersion  int
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
 	DeletedAt     *time.Time

@@ -34,6 +34,7 @@ type Tenant struct {
 	Issuer        string
 	SigningConfig SigningConfig
 	MFA           MFAPolicy
+	TokenVersion  int
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
 	DeletedAt     *time.Time
@@ -71,7 +72,8 @@ func NewTenant(id, domain, issuer string, alg Algorithm) (Tenant, error) {
 		SigningConfig: SigningConfig{
 			Algorithm: alg,
 		},
-		CreatedAt: now,
-		UpdatedAt: now,
+		TokenVersion: 1,
+		CreatedAt:    now,
+		UpdatedAt:    now,
 	}, nil
 }

@@ -73,6 +73,18 @@ func (r *InMemoryTenantRepository) Delete(_ context.Context, id string) error {
 	return nil
 }
 
+func (r *InMemoryTenantRepository) IncrementTokenVersion(_ context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	t, ok := r.tenants[id]
+	if !ok {
+		return apperrors.New(apperrors.ErrNotFound, "tenant not found")
+	}
+	t.TokenVersion++
+	r.tenants[id] = t
+	return nil
+}
+
 func (r *InMemoryTenantRepository) List(_ context.Context, offset, limit int) ([]tenant.Tenant, int, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

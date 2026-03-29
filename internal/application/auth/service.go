@@ -14,6 +14,7 @@ import (
 	"github.com/authcore/internal/domain/rbac"
 	"github.com/authcore/internal/domain/tenant"
 	"github.com/authcore/internal/domain/token"
+	"github.com/authcore/internal/domain/user"
 	apperrors "github.com/authcore/pkg/sdk/errors"
 )
 
@@ -24,6 +25,8 @@ type Service struct {
 	deviceRepo    token.DeviceCodeRepository
 	blacklist     token.TokenBlacklist
 	userValidator token.UserValidator
+	userRepo      user.Repository
+	tenantRepo    tenant.Repository
 	assignRepo    rbac.AssignmentRepository
 	jwksSvc       *jwks.Service
 	signer        token.Signer
@@ -76,6 +79,18 @@ func (s *Service) WithBlacklist(bl token.TokenBlacklist) *Service {
 // WithUserValidator sets the user credential validator (for password grant).
 func (s *Service) WithUserValidator(uv token.UserValidator) *Service {
 	s.userValidator = uv
+	return s
+}
+
+// WithUserRepo sets the user repository for token version lookups.
+func (s *Service) WithUserRepo(repo user.Repository) *Service {
+	s.userRepo = repo
+	return s
+}
+
+// WithTenantRepo sets the tenant repository for token version lookups.
+func (s *Service) WithTenantRepo(repo tenant.Repository) *Service {
+	s.tenantRepo = repo
 	return s
 }
 
@@ -420,6 +435,31 @@ func (s *Service) Introspect(ctx context.Context, req IntrospectRequest) (Intros
 		return IntrospectResponse{Active: false}, nil
 	}
 
+	// Check token version against current entity versions for instant revocation
+	if claims.TokenVersion > 0 {
+		if s.userRepo != nil && claims.Subject != "" && claims.Issuer != "" {
+			// Extract tenantID from audience or use issuer-based lookup
+			tenantID := ""
+			if len(claims.Audience) > 0 {
+				tenantID = firstAudience(claims.Audience)
+			}
+			if u, err := s.userRepo.GetByID(ctx, claims.Subject, tenantID); err == nil {
+				if u.TokenVersion > claims.TokenVersion {
+					return IntrospectResponse{Active: false}, nil
+				}
+			}
+		}
+		if s.tenantRepo != nil {
+			// Check tenant-wide version bump
+			tenantID := firstAudience(claims.Audience)
+			if t, err := s.tenantRepo.GetByID(ctx, tenantID); err == nil {
+				if t.TokenVersion > claims.TokenVersion {
+					return IntrospectResponse{Active: false}, nil
+				}
+			}
+		}
+	}
+
 	return IntrospectResponse{
 		Active:    true,
 		Scope:     "",
@@ -458,15 +498,29 @@ func (s *Service) issueTokens(ctx context.Context, subject, clientID, tenantID, 
 		permissions = rbac.FlattenPermissions(userRoles)
 	}
 
+	// Resolve token version from user + tenant for instant revocation
+	var tokenVersion int
+	if s.userRepo != nil && subject != "" && tenantID != "" {
+		if u, err := s.userRepo.GetByID(ctx, subject, tenantID); err == nil {
+			tokenVersion = u.TokenVersion
+		}
+	}
+	if s.tenantRepo != nil && tenantID != "" {
+		if t, err := s.tenantRepo.GetByID(ctx, tenantID); err == nil && t.TokenVersion > tokenVersion {
+			tokenVersion = t.TokenVersion
+		}
+	}
+
 	accessClaims := token.Claims{
-		Issuer:      "https://authcore",
-		Subject:     subject,
-		Audience:    []string{clientID},
-		ExpiresAt:   now.Add(s.accessTTL).Unix(),
-		IssuedAt:    now.Unix(),
-		JWTID:       mustGenerateID(),
-		Roles:       roles,
-		Permissions: permissions,
+		Issuer:       "https://authcore",
+		Subject:      subject,
+		Audience:     []string{clientID},
+		ExpiresAt:    now.Add(s.accessTTL).Unix(),
+		IssuedAt:     now.Unix(),
+		JWTID:        mustGenerateID(),
+		Roles:        roles,
+		Permissions:  permissions,
+		TokenVersion: tokenVersion,
 	}
 
 	accessToken, signErr := s.signer.Sign(accessClaims, kp.ID, kp.PrivateKey, kp.Algorithm)
@@ -475,13 +529,14 @@ func (s *Service) issueTokens(ctx context.Context, subject, clientID, tenantID, 
 	}
 
 	idClaims := token.Claims{
-		Issuer:    "https://authcore",
-		Subject:   subject,
-		Audience:  []string{clientID},
-		ExpiresAt: now.Add(s.idTokenTTL).Unix(),
-		IssuedAt:  now.Unix(),
-		JWTID:     mustGenerateID(),
-		Nonce:     nonce,
+		Issuer:       "https://authcore",
+		Subject:      subject,
+		Audience:     []string{clientID},
+		ExpiresAt:    now.Add(s.idTokenTTL).Unix(),
+		IssuedAt:     now.Unix(),
+		JWTID:        mustGenerateID(),
+		Nonce:        nonce,
+		TokenVersion: tokenVersion,
 	}
 
 	idToken, signErr := s.signer.Sign(idClaims, kp.ID, kp.PrivateKey, kp.Algorithm)

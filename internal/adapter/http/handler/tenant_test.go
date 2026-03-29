@@ -65,6 +65,10 @@ func (m *mockTenantHandlerRepo) List(ctx context.Context, offset, limit int) ([]
 	return nil, 0, nil
 }
 
+func (m *mockTenantHandlerRepo) IncrementTokenVersion(_ context.Context, _ string) error {
+	return nil
+}
+
 func newTenantHandler(repo tenant.Repository) *TenantHandler {
 	svc := tenantsvc.NewService(repo, slog.Default())
 	return NewTenantHandler(svc)

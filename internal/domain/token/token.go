@@ -19,6 +19,9 @@ type Claims struct {
 	// RBAC claims
 	Roles       []string `json:"roles,omitempty"`
 	Permissions []string `json:"permissions,omitempty"`
+
+	// Token versioning for instant revocation
+	TokenVersion int `json:"tv,omitempty"`
 }
 
 // TokenResponse is the OAuth 2.0 token response (RFC 6749 Section 5.1).

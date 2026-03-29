@@ -35,6 +35,7 @@ type Client struct {
 	RedirectURIs      []string
 	AllowedScopes     []string
 	AllowedGrantTypes []GrantType
+	TokenVersion      int
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
 	DeletedAt         *time.Time

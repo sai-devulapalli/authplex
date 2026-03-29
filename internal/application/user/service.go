@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	auditsvc "github.com/authcore/internal/application/audit"
+	domainaudit "github.com/authcore/internal/domain/audit"
 	domainotp "github.com/authcore/internal/domain/otp"
 	domainuser "github.com/authcore/internal/domain/user"
 	apperrors "github.com/authcore/pkg/sdk/errors"
@@ -21,9 +23,16 @@ type Service struct {
 	otpRepo     domainotp.Repository
 	emailSender domainotp.EmailSender
 	smsSender   domainotp.SMSSender
+	auditSvc    *auditsvc.Service
 	logger      *slog.Logger
 	sessionTTL  time.Duration
 	otpTTL      time.Duration
+}
+
+// WithAudit configures audit event logging.
+func (s *Service) WithAudit(a *auditsvc.Service) *Service {
+	s.auditSvc = a
+	return s
 }
 
 // NewService creates a new user service.
@@ -82,6 +91,9 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (RegisterRe
 	}
 
 	s.logger.Info("user registered", "user_id", u.ID, "email", u.Email, "tenant_id", u.TenantID)
+	if s.auditSvc != nil {
+		s.auditSvc.Log(ctx, req.TenantID, u.ID, "user", domainaudit.EventRegister, "user", u.ID, nil, nil)
+	}
 
 	// Auto-send verification OTP if email sender is configured
 	if s.otpRepo != nil && s.emailSender != nil {
@@ -116,6 +128,9 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (LoginResponse, *
 	}
 
 	if verifyErr := s.hasher.Verify(req.Password, u.PasswordHash); verifyErr != nil {
+		if s.auditSvc != nil {
+			s.auditSvc.Log(ctx, req.TenantID, u.ID, "user", domainaudit.EventLoginFailure, "user", u.ID, nil, nil)
+		}
 		return LoginResponse{}, apperrors.New(apperrors.ErrUnauthorized, "invalid credentials")
 	}
 
@@ -134,6 +149,9 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (LoginResponse, *
 	}
 
 	s.logger.Info("user logged in", "user_id", u.ID, "tenant_id", u.TenantID)
+	if s.auditSvc != nil {
+		s.auditSvc.Log(ctx, req.TenantID, u.ID, "user", domainaudit.EventLoginSuccess, "user", u.ID, nil, nil)
+	}
 
 	return LoginResponse{
 		SessionToken: sessionID,
@@ -148,6 +166,9 @@ func (s *Service) Logout(ctx context.Context, req LogoutRequest) *apperrors.AppE
 	}
 	s.sessionRepo.Delete(ctx, req.SessionToken) //nolint:errcheck
 	s.logger.Info("user logged out")
+	if s.auditSvc != nil {
+		s.auditSvc.Log(ctx, "", "", "user", domainaudit.EventSessionRevoked, "session", req.SessionToken, nil, nil)
+	}
 	return nil
 }
 
@@ -246,6 +267,9 @@ func (s *Service) RequestOTP(ctx context.Context, req RequestOTPRequest) (Reques
 	}
 
 	s.logger.Info("OTP sent", "channel", channel, "identifier", identifier, "purpose", req.Purpose)
+	if s.auditSvc != nil {
+		s.auditSvc.Log(ctx, req.TenantID, identifier, "user", domainaudit.EventOTPRequested, "otp", identifier, nil, nil)
+	}
 
 	return RequestOTPResponse{
 		Message:   "OTP sent",
@@ -332,6 +356,9 @@ func (s *Service) VerifyOTP(ctx context.Context, req VerifyOTPRequest) (LoginRes
 	}
 
 	s.logger.Info("OTP verified, session created", "user_id", u.ID)
+	if s.auditSvc != nil {
+		s.auditSvc.Log(ctx, req.TenantID, u.ID, "user", domainaudit.EventOTPVerified, "user", u.ID, nil, nil)
+	}
 
 	return LoginResponse{
 		SessionToken: sessionID,
@@ -395,6 +422,9 @@ func (s *Service) ResetPassword(ctx context.Context, req ResetPasswordRequest) *
 	}
 
 	s.logger.Info("password reset", "user_id", u.ID)
+	if s.auditSvc != nil {
+		s.auditSvc.Log(ctx, req.TenantID, u.ID, "user", domainaudit.EventPasswordReset, "user", u.ID, nil, nil)
+	}
 	return nil
 }
 

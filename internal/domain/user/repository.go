@@ -10,6 +10,7 @@ type Repository interface {
 	GetByPhone(ctx context.Context, phone, tenantID string) (User, error)
 	Update(ctx context.Context, u User) error
 	Delete(ctx context.Context, id, tenantID string) error
+	IncrementTokenVersion(ctx context.Context, id, tenantID string) error
 }
 
 // SessionRepository is the port interface for session persistence.

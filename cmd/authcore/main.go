@@ -30,6 +30,7 @@ import (
 	providersvc "github.com/authcore/internal/application/provider"
 	auditsvc "github.com/authcore/internal/application/audit"
 	rbacsvc "github.com/authcore/internal/application/rbac"
+	domainaudit "github.com/authcore/internal/domain/audit"
 	"github.com/authcore/internal/application/social"
 	tenantsvc "github.com/authcore/internal/application/tenant"
 	usersvc "github.com/authcore/internal/application/user"
@@ -86,6 +87,7 @@ type repos struct {
 	webauthn        mfa.WebAuthnRepository
 	role            rbac.RoleRepository
 	assignment      rbac.AssignmentRepository
+	audit           domainaudit.Repository
 }
 
 // setupInMemoryRepos creates all in-memory repositories (development mode).
@@ -109,13 +111,14 @@ func setupInMemoryRepos() repos {
 		webauthn:   cache.NewInMemoryWebAuthnRepository(),
 		role:       roleRepo,
 		assignment: cache.NewInMemoryAssignmentRepository(roleRepo),
+		audit:      cache.NewInMemoryAuditRepository(),
 	}
 }
 
 // setupProdRepos creates Postgres + Redis backed repos for production.
 func setupProdRepos(db *sql.DB, redisClient *adaptredis.Client) repos {
 	rdb := redisClient.Redis()
-	roleRepo := cache.NewInMemoryRoleRepository() // TODO: postgres role repo
+	roleRepo := postgres.NewRoleRepository(db)
 	return repos{
 		jwk:        postgres.NewJWKRepository(db),
 		tenant:     postgres.NewTenantRepository(db),
@@ -133,13 +136,14 @@ func setupProdRepos(db *sql.DB, redisClient *adaptredis.Client) repos {
 		challenge:  cache.NewInMemoryChallengeRepository(),
 		webauthn:   cache.NewInMemoryWebAuthnRepository(),
 		role:       roleRepo,
-		assignment: cache.NewInMemoryAssignmentRepository(roleRepo),
+		assignment: postgres.NewAssignmentRepository(db, roleRepo),
+		audit:      postgres.NewAuditRepository(db),
 	}
 }
 
 // setupPostgresRepos creates Postgres-backed repos without Redis (fallback).
 func setupPostgresRepos(db *sql.DB) repos {
-	roleRepo := cache.NewInMemoryRoleRepository()
+	roleRepo := postgres.NewRoleRepository(db)
 	return repos{
 		jwk:        postgres.NewJWKRepository(db),
 		tenant:     postgres.NewTenantRepository(db),
@@ -157,7 +161,8 @@ func setupPostgresRepos(db *sql.DB) repos {
 		challenge:  cache.NewInMemoryChallengeRepository(),
 		webauthn:   cache.NewInMemoryWebAuthnRepository(),
 		role:       roleRepo,
-		assignment: cache.NewInMemoryAssignmentRepository(roleRepo),
+		assignment: postgres.NewAssignmentRepository(db, roleRepo),
+		audit:      postgres.NewAuditRepository(db),
 	}
 }
 
@@ -182,22 +187,26 @@ func setupServerWithRepos(cfg config.Config, log *slog.Logger, r repos) http.Han
 		WithDeviceRepo(r.device).
 		WithBlacklist(r.blacklist)
 
+	auditService := auditsvc.NewService(r.audit, log)
+
 	clientService := clientsvc.NewService(r.client, hasher, log)
+	clientService.WithAudit(auditService)
 	tenantSvc := tenantsvc.NewService(r.tenant, log)
+	tenantSvc.WithAudit(auditService)
 	rbacService := rbacsvc.NewService(r.role, r.assignment, log)
-	auditRepo := cache.NewInMemoryAuditRepository()
-	auditService := auditsvc.NewService(auditRepo, log)
-	_ = auditService // available for handlers to log events
+	rbacService.WithAudit(auditService)
 
 	// Wire RBAC into auth service for JWT claims
 	authSvc.WithRBAC(r.assignment)
 
 	oauthClient := adapthttp.NewHTTPOAuthClient()
 	providerService := providersvc.NewService(r.provider, log)
+	providerService.WithAudit(auditService)
 	socialSvc := social.NewService(r.provider, r.externalID, r.state, oauthClient,
 		authSvc, cfg.Issuer+"/callback", log)
 
 	mfaService := mfasvc.NewService(r.totp, r.challenge, authSvc, log)
+	mfaService.WithAudit(auditService)
 	mfaService.WithWebAuthn(r.webauthn, cfg.WebAuthnRPID, cfg.WebAuthnRPName, strings.Split(cfg.WebAuthnRPOrigins, ","))
 
 	// OTP senders (console for local, SMTP/Twilio for prod)
@@ -217,6 +226,7 @@ func setupServerWithRepos(cfg config.Config, log *slog.Logger, r repos) http.Han
 	otpRepo := cache.NewInMemoryOTPRepository()
 	userService := usersvc.NewService(r.user, r.session, hasher, log).
 		WithOTP(otpRepo, emailSender, smsSender)
+	userService.WithAudit(auditService)
 
 	authSvc.WithUserValidator(userService)
 

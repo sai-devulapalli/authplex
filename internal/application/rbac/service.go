@@ -6,6 +6,8 @@ import (
 	"encoding/base64"
 	"log/slog"
 
+	auditsvc "github.com/authcore/internal/application/audit"
+	domainaudit "github.com/authcore/internal/domain/audit"
 	domainrbac "github.com/authcore/internal/domain/rbac"
 	apperrors "github.com/authcore/pkg/sdk/errors"
 )
@@ -14,7 +16,14 @@ import (
 type Service struct {
 	roleRepo   domainrbac.RoleRepository
 	assignRepo domainrbac.AssignmentRepository
+	auditSvc   *auditsvc.Service
 	logger     *slog.Logger
+}
+
+// WithAudit configures audit event logging.
+func (s *Service) WithAudit(a *auditsvc.Service) *Service {
+	s.auditSvc = a
+	return s
 }
 
 // NewService creates a new RBAC service.
@@ -39,6 +48,9 @@ func (s *Service) CreateRole(ctx context.Context, req CreateRoleRequest) (RoleRe
 	}
 
 	s.logger.Info("role created", "role_id", role.ID, "name", role.Name, "tenant_id", role.TenantID)
+	if s.auditSvc != nil {
+		s.auditSvc.Log(ctx, req.TenantID, "system", "system", domainaudit.EventRoleCreated, "role", role.ID, nil, nil)
+	}
 	return toRoleResponse(role), nil
 }
 
@@ -101,6 +113,9 @@ func (s *Service) AssignRole(ctx context.Context, userID, roleID, tenantID strin
 		return apperrors.Wrap(apperrors.ErrInternal, "failed to assign role", err)
 	}
 	s.logger.Info("role assigned", "user_id", userID, "role_id", roleID)
+	if s.auditSvc != nil {
+		s.auditSvc.Log(ctx, tenantID, "system", "system", domainaudit.EventRoleAssigned, "role", roleID, nil, map[string]any{"user_id": userID})
+	}
 	return nil
 }
 
@@ -110,6 +125,9 @@ func (s *Service) RevokeRole(ctx context.Context, userID, roleID, tenantID strin
 		return apperrors.Wrap(apperrors.ErrInternal, "failed to revoke role", err)
 	}
 	s.logger.Info("role revoked", "user_id", userID, "role_id", roleID)
+	if s.auditSvc != nil {
+		s.auditSvc.Log(ctx, tenantID, "system", "system", domainaudit.EventRoleRevoked, "role", roleID, nil, map[string]any{"user_id": userID})
+	}
 	return nil
 }
 
