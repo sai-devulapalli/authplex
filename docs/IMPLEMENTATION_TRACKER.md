@@ -182,20 +182,23 @@
 | ~~12~~ | ~~Apple JWT client_secret generation~~ | ~~Medium~~ | **Done** — ES256 signing, ExchangeCodeWithConfig |
 | ~~13~~ | ~~Refresh token cleanup (expired accumulation)~~ | ~~Small~~ | **Done** — Background cleanup service, 7-day retention |
 | ~~14~~ | ~~Key auto-rotation~~ | ~~Small~~ | **Done** — 90-day default, configurable via AUTHCORE_KEY_ROTATION_DAYS |
-| 15 | Admin CLI tool | Small |
-| 16 | SQL Server repository implementations | Medium |
+| 15 | Admin CLI tool | Small | `authcore tenant create --domain example.com` |
+| 16 | SQL Server repository implementations | Medium | |
+| 17 | CORS per-client | Small | Currently global; should be per-client redirect origin whitelist |
+| 18 | Postgres RBAC repos | Medium | Roles + assignments currently in-memory; need Postgres persistence |
+| 19 | Audit event auto-wiring | Medium | Wire `auditSvc.Log()` into all application services (currently zero calls wired) |
 
 ### Low Priority
 
 | # | Item | Effort |
 |---|------|--------|
-| ~~17~~ | ~~mTLS~~ | ~~Medium~~ | **Done** — mTLS middleware for client certificate verification |
-| ~~18~~ | ~~OpenTelemetry traces~~ | ~~Medium~~ | **Done** — Tracing middleware with distributed trace context |
-| 19 | LDAP integration | Medium |
-| 20 | Admin UI (separate repo: authcore-admin) | Large |
-| 21 | JWE (encrypted tokens) | Medium |
-| ~~22~~ | ~~Audit logging~~ | ~~Medium~~ | **Done** — 25+ event types, audit domain + repository + query API |
-| 23 | Security audit | External |
+| ~~20~~ | ~~mTLS~~ | ~~Medium~~ | **Done** — mTLS middleware for client certificate verification |
+| ~~21~~ | ~~OpenTelemetry traces~~ | ~~Medium~~ | **Done** — Tracing middleware with distributed trace context |
+| 22 | LDAP integration | Medium |
+| 23 | Admin UI (separate repo: authcore-admin) | Large | Dashboard + CRUD done; needs user mgmt, SAML config |
+| 24 | JWE (encrypted tokens) | Medium |
+| ~~25~~ | ~~Audit logging~~ | ~~Medium~~ | **Done** — 25+ event types, domain + repository + query API |
+| 26 | Security audit | External |
 
 ---
 

@@ -764,14 +764,25 @@ make clean           # Remove build artifacts
 
 ### What's Pending
 
+See [ROADMAP.md](ROADMAP.md) for the full tiered implementation plan.
+
 | Priority | Item | Description |
 |----------|------|-------------|
-| High | SAML 2.0 | Enterprise SSO requirement (3-4 weeks) |
+| **Tier 1** | Token versioning | Instant revocation via version field on user/tenant |
+| **Tier 1** | DB tenant isolation (RLS) | Postgres row-level security policies |
+| **Tier 1** | Multi-level rate limiting | Per-IP, per-tenant, per-endpoint + Redis backend |
+| **Tier 1** | Admin auth model | Replace API key with JWT-based admin roles |
+| **Tier 2** | SAML 2.0 | Enterprise SSO requirement |
+| **Tier 2** | SCIM | User provisioning (RFC 7644) |
 | Medium | Postgres RBAC repos | Currently in-memory; need Postgres persistence |
-| Medium | Audit event auto-wiring | Wire audit events into all services automatically |
+| Medium | Audit event auto-wiring | Wire audit events into all services (currently zero calls wired) |
+| Medium | CORS per-client | Currently global; should be per-client whitelist |
+| Medium | Admin CLI tool | `authcore tenant create --domain example.com` |
 | Medium | Security headers | HSTS, CSP, X-Content-Type-Options |
-| Low | LDAP | Direct AD bind (Azure AD OIDC covers most cases) |
-| Low | Admin UI | Separate SPA repo (authcore-admin) |
+| **Tier 3** | Policy engine (ABAC) | Attribute-based access control beyond RBAC |
+| **Tier 3** | Webhooks | Event streaming to external systems |
+| **Tier 3** | Risk-based auth | Adaptive MFA triggered by risk scoring |
+| Low | LDAP | Direct AD bind (Azure AD OIDC covers most) |
 | Low | JWE (encrypted tokens) | RFC 7516 |
 | External | Security audit | Penetration test ($5K-30K) |
 
