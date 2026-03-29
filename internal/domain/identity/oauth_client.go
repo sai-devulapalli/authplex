@@ -5,8 +5,10 @@ import "context"
 // OAuthClient is the port interface for making OAuth 2.0 requests to external providers.
 type OAuthClient interface {
 	ExchangeCode(ctx context.Context, tokenURL, code, redirectURI, clientID, clientSecret string) (OAuthTokenResponse, error)
+	ExchangeCodeWithConfig(ctx context.Context, tokenURL, code, redirectURI, clientID, clientSecret string, extraConfig map[string]string) (OAuthTokenResponse, error)
 	FetchUserInfo(ctx context.Context, userInfoURL, accessToken string) (UserInfo, error)
 	FetchOIDCDiscovery(ctx context.Context, discoveryURL string) (OIDCConfig, error)
+	DecodeIDToken(ctx context.Context, idToken, jwksURI string) (UserInfo, error)
 }
 
 // OAuthTokenResponse is the token response from an external provider.

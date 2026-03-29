@@ -22,6 +22,7 @@ import (
 	adaptredis "github.com/authcore/internal/adapter/redis"
 	adaptsms "github.com/authcore/internal/adapter/sms"
 	"github.com/authcore/internal/application/auth"
+	"github.com/authcore/internal/application/cleanup"
 	clientsvc "github.com/authcore/internal/application/client"
 	"github.com/authcore/internal/application/discovery"
 	"github.com/authcore/internal/application/jwks"
@@ -82,6 +83,7 @@ type repos struct {
 	state           identity.StateRepository
 	totp            mfa.TOTPRepository
 	challenge       mfa.ChallengeRepository
+	webauthn        mfa.WebAuthnRepository
 	role            rbac.RoleRepository
 	assignment      rbac.AssignmentRepository
 }
@@ -104,6 +106,7 @@ func setupInMemoryRepos() repos {
 		state:      cache.NewInMemoryStateRepository(),
 		totp:       cache.NewInMemoryTOTPRepository(),
 		challenge:  cache.NewInMemoryChallengeRepository(),
+		webauthn:   cache.NewInMemoryWebAuthnRepository(),
 		role:       roleRepo,
 		assignment: cache.NewInMemoryAssignmentRepository(roleRepo),
 	}
@@ -128,6 +131,7 @@ func setupProdRepos(db *sql.DB, redisClient *adaptredis.Client) repos {
 		state:      adaptredis.NewStateRepository(rdb),
 		totp:       cache.NewInMemoryTOTPRepository(),
 		challenge:  cache.NewInMemoryChallengeRepository(),
+		webauthn:   cache.NewInMemoryWebAuthnRepository(),
 		role:       roleRepo,
 		assignment: cache.NewInMemoryAssignmentRepository(roleRepo),
 	}
@@ -151,6 +155,7 @@ func setupPostgresRepos(db *sql.DB) repos {
 		state:      cache.NewInMemoryStateRepository(),
 		totp:       cache.NewInMemoryTOTPRepository(),
 		challenge:  cache.NewInMemoryChallengeRepository(),
+		webauthn:   cache.NewInMemoryWebAuthnRepository(),
 		role:       roleRepo,
 		assignment: cache.NewInMemoryAssignmentRepository(roleRepo),
 	}
@@ -193,6 +198,7 @@ func setupServerWithRepos(cfg config.Config, log *slog.Logger, r repos) http.Han
 		authSvc, cfg.Issuer+"/callback", log)
 
 	mfaService := mfasvc.NewService(r.totp, r.challenge, authSvc, log)
+	mfaService.WithWebAuthn(r.webauthn, cfg.WebAuthnRPID, cfg.WebAuthnRPName, strings.Split(cfg.WebAuthnRPOrigins, ","))
 
 	// OTP senders (console for local, SMTP/Twilio for prod)
 	var emailSender domainotp.EmailSender
@@ -272,6 +278,10 @@ func setupServerWithRepos(cfg config.Config, log *slog.Logger, r repos) http.Han
 	mux.HandleFunc("/mfa/totp/enroll", mfaHandler.HandleEnroll)
 	mux.HandleFunc("/mfa/totp/confirm", mfaHandler.HandleConfirm)
 	mux.Handle("/mfa/verify", authRateLimiter.Middleware(http.HandlerFunc(mfaHandler.HandleVerify)))
+	mux.HandleFunc("/mfa/webauthn/register/begin", mfaHandler.HandleWebAuthnRegisterBegin)
+	mux.HandleFunc("/mfa/webauthn/register/finish", mfaHandler.HandleWebAuthnRegisterFinish)
+	mux.HandleFunc("/mfa/webauthn/login/begin", mfaHandler.HandleWebAuthnLoginBegin)
+	mux.HandleFunc("/mfa/webauthn/login/finish", mfaHandler.HandleWebAuthnLoginFinish)
 
 	// User authentication endpoints (tenant-scoped)
 	mux.Handle("/register",
@@ -383,6 +393,7 @@ func run() error {
 	log.Info("authcore starting", "version", version, "commit", commit, "port", cfg.HTTPPort, "env", cfg.Environment)
 
 	var mux http.Handler
+	var r repos
 
 	if cfg.Environment != logger.Local {
 		db, err := connectDB(context.Background(), cfg, log)
@@ -392,7 +403,6 @@ func run() error {
 		defer db.Close()
 
 		// Connect to Redis if URL is configured
-		var r repos
 		if cfg.RedisURL != "" {
 			redisClient, err := adaptredis.NewClient(context.Background(), cfg.RedisURL)
 			if err != nil {
@@ -410,8 +420,18 @@ func run() error {
 		mux = setupServerWithRepos(cfg, log, r)
 	} else {
 		log.Info("using in-memory storage (local mode)")
-		mux = setupServer(cfg, log)
+		r = setupInMemoryRepos()
+		mux = setupServerWithRepos(cfg, log, r)
 	}
+
+	// Start background cleanup service (token cleanup + key rotation)
+	keyGen := adaptcrypto.NewKeyGenerator()
+	keyConv := adaptcrypto.NewJWKConverter()
+	jwksSvc := jwks.NewService(r.jwk, keyGen, keyConv, log)
+	cleanupSvc := cleanup.NewService(r.refresh, r.jwk, jwksSvc, r.tenant, log, cfg.KeyRotationDays)
+	cleanupCtx, cleanupCancel := context.WithCancel(context.Background())
+	defer cleanupCancel()
+	go cleanupSvc.Start(cleanupCtx)
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.HTTPPort),

@@ -64,3 +64,16 @@ func (r *InMemoryRefreshRepository) RevokeFamily(_ context.Context, familyID str
 	}
 	return nil
 }
+
+func (r *InMemoryRefreshRepository) DeleteExpiredAndRevoked(_ context.Context, olderThan time.Time) (int64, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var count int64
+	for k, rt := range r.tokens {
+		if (rt.RevokedAt != nil && rt.RevokedAt.Before(olderThan)) || (!rt.ExpiresAt.IsZero() && rt.ExpiresAt.Before(olderThan)) {
+			delete(r.tokens, k)
+			count++
+		}
+	}
+	return count, nil
+}

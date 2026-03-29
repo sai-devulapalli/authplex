@@ -18,6 +18,7 @@ type RefreshTokenRepository interface {
 	GetByToken(ctx context.Context, token string) (RefreshToken, error)
 	RevokeByToken(ctx context.Context, token string) error
 	RevokeFamily(ctx context.Context, familyID string) error
+	DeleteExpiredAndRevoked(ctx context.Context, olderThan time.Time) (int64, error)
 }
 
 // DeviceCodeRepository stores and manages device authorization codes.

@@ -1,5 +1,7 @@
 package mfa
 
+import "encoding/json"
+
 // EnrollRequest is the DTO for TOTP enrollment.
 type EnrollRequest struct {
 	Subject  string `json:"subject"`
@@ -46,4 +48,30 @@ type CreateChallengeRequest struct {
 	CodeChallenge       string
 	CodeChallengeMethod string
 	Nonce               string
+}
+
+// WebAuthnRegisterRequest is the DTO for starting WebAuthn registration.
+type WebAuthnRegisterRequest struct {
+	Subject     string `json:"subject"`
+	TenantID    string `json:"-"`
+	DisplayName string `json:"display_name"`
+}
+
+// WebAuthnRegisterFinishRequest is the DTO for completing WebAuthn registration.
+type WebAuthnRegisterFinishRequest struct {
+	Subject  string          `json:"subject"`
+	TenantID string          `json:"-"`
+	Response json.RawMessage `json:"response"`
+}
+
+// WebAuthnLoginRequest is the DTO for starting WebAuthn authentication.
+type WebAuthnLoginRequest struct {
+	Subject  string `json:"subject"`
+	TenantID string `json:"-"`
+}
+
+// WebAuthnLoginFinishRequest is the DTO for completing WebAuthn authentication.
+type WebAuthnLoginFinishRequest struct {
+	ChallengeID string          `json:"challenge_id"`
+	Response    json.RawMessage `json:"response"`
 }

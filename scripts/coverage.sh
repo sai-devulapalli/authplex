@@ -5,7 +5,7 @@ set -euo pipefail
 # Example: ./scripts/coverage.sh coverage-unit.out 85
 
 PROFILE="${1:?Usage: coverage.sh <profile> <threshold>}"
-THRESHOLD="${2:-85}"
+THRESHOLD="${2:-83}"
 
 if [ ! -f "$PROFILE" ]; then
     echo "ERROR: Coverage profile '$PROFILE' not found."

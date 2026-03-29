@@ -145,3 +145,35 @@ func (r *JWKRepository) Deactivate(ctx context.Context, keyID string) error {
 
 	return nil
 }
+
+// GetAllActiveTenantIDs returns distinct tenant IDs that have active key pairs.
+func (r *JWKRepository) GetAllActiveTenantIDs(ctx context.Context) ([]string, error) {
+	query := `SELECT DISTINCT tenant_id FROM jwk_pairs WHERE active = true`
+
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, apperrors.Wrap(apperrors.ErrInternal, "failed to query active tenant IDs", err)
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, apperrors.Wrap(apperrors.ErrInternal, "failed to scan tenant ID", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// DeleteInactive removes inactive key pairs that expired before the given time.
+func (r *JWKRepository) DeleteInactive(ctx context.Context, olderThan time.Time) (int64, error) {
+	query := `DELETE FROM jwk_pairs WHERE active = false AND expires_at IS NOT NULL AND expires_at < $1`
+	result, err := r.db.ExecContext(ctx, query, olderThan)
+	if err != nil {
+		return 0, apperrors.Wrap(apperrors.ErrInternal, "failed to cleanup inactive keys", err)
+	}
+	n, _ := result.RowsAffected()
+	return n, nil
+}

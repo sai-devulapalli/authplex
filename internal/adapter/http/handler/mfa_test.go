@@ -89,6 +89,8 @@ func (m *mockMFAJWKRepo) GetActive(_ context.Context, _ string) (jwk.KeyPair, er
 }
 func (m *mockMFAJWKRepo) GetAllPublic(_ context.Context, _ string) ([]jwk.KeyPair, error) { return nil, nil }
 func (m *mockMFAJWKRepo) Deactivate(_ context.Context, _ string) error { return nil }
+func (m *mockMFAJWKRepo) GetAllActiveTenantIDs(_ context.Context) ([]string, error) { return nil, nil }
+func (m *mockMFAJWKRepo) DeleteInactive(_ context.Context, _ time.Time) (int64, error) { return 0, nil }
 
 type mockMFAGen struct{}
 func (m *mockMFAGen) GenerateRSA() ([]byte, []byte, error) { return nil, nil, nil }
@@ -221,4 +223,138 @@ func TestMFAHandler_Verify_Success(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Contains(t, w.Body.String(), "code")
+}
+
+// --- WebAuthn Handler Tests ---
+
+func newMFATestServiceWithWebAuthn() *mfasvc.Service {
+	svc := newMFATestService()
+	return svc.WithWebAuthn(newMockWebAuthnHandlerRepo(), "localhost", "Test", []string{"http://localhost:8080"})
+}
+
+type mockWebAuthnHandlerRepo struct {
+	creds map[string]domainmfa.WebAuthnCredential
+}
+
+func newMockWebAuthnHandlerRepo() *mockWebAuthnHandlerRepo {
+	return &mockWebAuthnHandlerRepo{creds: make(map[string]domainmfa.WebAuthnCredential)}
+}
+
+func (m *mockWebAuthnHandlerRepo) Store(_ context.Context, c domainmfa.WebAuthnCredential) error {
+	m.creds[c.ID] = c
+	return nil
+}
+func (m *mockWebAuthnHandlerRepo) GetBySubject(_ context.Context, tenantID, subject string) ([]domainmfa.WebAuthnCredential, error) {
+	var result []domainmfa.WebAuthnCredential
+	for _, c := range m.creds {
+		if c.TenantID == tenantID && c.Subject == subject {
+			result = append(result, c)
+		}
+	}
+	if len(result) == 0 {
+		return nil, errors.New("not found")
+	}
+	return result, nil
+}
+func (m *mockWebAuthnHandlerRepo) GetByCredentialID(_ context.Context, _ []byte) (domainmfa.WebAuthnCredential, error) {
+	return domainmfa.WebAuthnCredential{}, errors.New("not found")
+}
+func (m *mockWebAuthnHandlerRepo) UpdateSignCount(_ context.Context, _ string, _ uint32) error { return nil }
+func (m *mockWebAuthnHandlerRepo) Delete(_ context.Context, _ string) error { return nil }
+
+func TestMFAHandler_WebAuthnRegisterBegin(t *testing.T) {
+	h := NewMFAHandler(newMFATestServiceWithWebAuthn())
+
+	body := `{"subject":"user-1","display_name":"Test User"}`
+	req := httptest.NewRequest(http.MethodPost, "/mfa/webauthn/register/begin", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	h.HandleWebAuthnRegisterBegin(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Contains(t, w.Body.String(), "session_id")
+	assert.Contains(t, w.Body.String(), "options")
+}
+
+func TestMFAHandler_WebAuthnRegisterBegin_MethodNotAllowed(t *testing.T) {
+	h := NewMFAHandler(newMFATestServiceWithWebAuthn())
+
+	req := httptest.NewRequest(http.MethodGet, "/mfa/webauthn/register/begin", nil)
+	w := httptest.NewRecorder()
+
+	h.HandleWebAuthnRegisterBegin(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestMFAHandler_WebAuthnRegisterFinish_BadRequest(t *testing.T) {
+	h := NewMFAHandler(newMFATestServiceWithWebAuthn())
+
+	body := `{"subject":"user-1","response":{"session_id":"nonexistent","response":{}}}`
+	req := httptest.NewRequest(http.MethodPost, "/mfa/webauthn/register/finish", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	h.HandleWebAuthnRegisterFinish(w, req)
+
+	assert.NotEqual(t, http.StatusOK, w.Code) // session not found
+}
+
+func TestMFAHandler_WebAuthnLoginBegin_NoCredentials(t *testing.T) {
+	h := NewMFAHandler(newMFATestServiceWithWebAuthn())
+
+	body := `{"subject":"user-1"}`
+	req := httptest.NewRequest(http.MethodPost, "/mfa/webauthn/login/begin", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	h.HandleWebAuthnLoginBegin(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestMFAHandler_WebAuthnLoginBegin_MethodNotAllowed(t *testing.T) {
+	h := NewMFAHandler(newMFATestServiceWithWebAuthn())
+
+	req := httptest.NewRequest(http.MethodGet, "/mfa/webauthn/login/begin", nil)
+	w := httptest.NewRecorder()
+
+	h.HandleWebAuthnLoginBegin(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestMFAHandler_WebAuthnLoginFinish_MethodNotAllowed(t *testing.T) {
+	h := NewMFAHandler(newMFATestServiceWithWebAuthn())
+
+	req := httptest.NewRequest(http.MethodGet, "/mfa/webauthn/login/finish", nil)
+	w := httptest.NewRecorder()
+
+	h.HandleWebAuthnLoginFinish(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestMFAHandler_WebAuthnRegisterFinish_MethodNotAllowed(t *testing.T) {
+	h := NewMFAHandler(newMFATestServiceWithWebAuthn())
+
+	req := httptest.NewRequest(http.MethodGet, "/mfa/webauthn/register/finish", nil)
+	w := httptest.NewRecorder()
+
+	h.HandleWebAuthnRegisterFinish(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestMFAHandler_WebAuthnLoginFinish_BadJSON(t *testing.T) {
+	h := NewMFAHandler(newMFATestServiceWithWebAuthn())
+
+	req := httptest.NewRequest(http.MethodPost, "/mfa/webauthn/login/finish", strings.NewReader("not json"))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	h.HandleWebAuthnLoginFinish(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 }

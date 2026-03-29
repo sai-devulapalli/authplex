@@ -48,6 +48,8 @@ func (m *mockJWKRepo) GetAllPublic(_ context.Context, _ string) ([]jwk.KeyPair, 
 	return nil, nil
 }
 func (m *mockJWKRepo) Deactivate(_ context.Context, _ string) error { return nil }
+func (m *mockJWKRepo) GetAllActiveTenantIDs(_ context.Context) ([]string, error) { return nil, nil }
+func (m *mockJWKRepo) DeleteInactive(_ context.Context, _ time.Time) (int64, error) { return 0, nil }
 
 type mockJWKRepoNoKey struct{}
 
@@ -59,6 +61,8 @@ func (m *mockJWKRepoNoKey) GetAllPublic(_ context.Context, _ string) ([]jwk.KeyP
 	return nil, nil
 }
 func (m *mockJWKRepoNoKey) Deactivate(_ context.Context, _ string) error { return nil }
+func (m *mockJWKRepoNoKey) GetAllActiveTenantIDs(_ context.Context) ([]string, error) { return nil, nil }
+func (m *mockJWKRepoNoKey) DeleteInactive(_ context.Context, _ time.Time) (int64, error) { return 0, nil }
 
 type mockGen struct{}
 
@@ -124,6 +128,7 @@ func (m *mockRefreshRepo) RevokeFamily(_ context.Context, familyID string) error
 	}
 	return nil
 }
+func (m *mockRefreshRepo) DeleteExpiredAndRevoked(_ context.Context, _ time.Time) (int64, error) { return 0, nil }
 
 type mockDeviceRepo struct {
 	devices map[string]token.DeviceCode

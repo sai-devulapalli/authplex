@@ -2,6 +2,7 @@ package mfa
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"testing"
@@ -90,6 +91,8 @@ func (m *mockJWKRepo) GetActive(_ context.Context, _ string) (jwk.KeyPair, error
 }
 func (m *mockJWKRepo) GetAllPublic(_ context.Context, _ string) ([]jwk.KeyPair, error) { return nil, nil }
 func (m *mockJWKRepo) Deactivate(_ context.Context, _ string) error { return nil }
+func (m *mockJWKRepo) GetAllActiveTenantIDs(_ context.Context) ([]string, error) { return nil, nil }
+func (m *mockJWKRepo) DeleteInactive(_ context.Context, _ time.Time) (int64, error) { return 0, nil }
 
 type mockGen struct{}
 func (m *mockGen) GenerateRSA() ([]byte, []byte, error) { return nil, nil, nil }
@@ -325,4 +328,414 @@ func TestHasEnrolledMFA_False(t *testing.T) {
 	svc := NewService(newMockTOTPRepo(), newMockChallengeRepo(), newTestAuthSvc(), slog.Default())
 
 	assert.False(t, svc.HasEnrolledMFA(context.Background(), "t1", "nonexistent"))
+}
+
+// --- WebAuthn Tests ---
+
+type mockWebAuthnRepo struct {
+	creds map[string]domainmfa.WebAuthnCredential
+}
+
+func newMockWebAuthnRepo() *mockWebAuthnRepo {
+	return &mockWebAuthnRepo{creds: make(map[string]domainmfa.WebAuthnCredential)}
+}
+
+func (m *mockWebAuthnRepo) Store(_ context.Context, c domainmfa.WebAuthnCredential) error {
+	m.creds[c.ID] = c
+	return nil
+}
+
+func (m *mockWebAuthnRepo) GetBySubject(_ context.Context, tenantID, subject string) ([]domainmfa.WebAuthnCredential, error) {
+	var result []domainmfa.WebAuthnCredential
+	for _, c := range m.creds {
+		if c.TenantID == tenantID && c.Subject == subject {
+			result = append(result, c)
+		}
+	}
+	if len(result) == 0 {
+		return nil, errors.New("not found")
+	}
+	return result, nil
+}
+
+func (m *mockWebAuthnRepo) GetByCredentialID(_ context.Context, credID []byte) (domainmfa.WebAuthnCredential, error) {
+	for _, c := range m.creds {
+		if string(c.CredentialID) == string(credID) {
+			return c, nil
+		}
+	}
+	return domainmfa.WebAuthnCredential{}, errors.New("not found")
+}
+
+func (m *mockWebAuthnRepo) UpdateSignCount(_ context.Context, id string, count uint32) error {
+	c, ok := m.creds[id]
+	if !ok {
+		return errors.New("not found")
+	}
+	c.SignCount = count
+	m.creds[id] = c
+	return nil
+}
+
+func (m *mockWebAuthnRepo) Delete(_ context.Context, id string) error {
+	delete(m.creds, id)
+	return nil
+}
+
+func TestWithWebAuthn(t *testing.T) {
+	svc := NewService(newMockTOTPRepo(), newMockChallengeRepo(), newTestAuthSvc(), slog.Default())
+	repo := newMockWebAuthnRepo()
+
+	result := svc.WithWebAuthn(repo, "example.com", "Example", []string{"https://example.com"})
+
+	assert.Same(t, svc, result) // returns same pointer
+	assert.NotNil(t, svc.webauthnRepo)
+	assert.Equal(t, "example.com", svc.webauthnRPID)
+	assert.Equal(t, "Example", svc.webauthnRPName)
+	assert.Equal(t, []string{"https://example.com"}, svc.webauthnRPOrigins)
+}
+
+func TestHasEnrolledMFA_WithWebAuthn(t *testing.T) {
+	waRepo := newMockWebAuthnRepo()
+	waRepo.creds["c1"] = domainmfa.WebAuthnCredential{
+		ID: "c1", Subject: "user-1", TenantID: "t1", CredentialID: []byte("cred-1"),
+	}
+
+	svc := NewService(newMockTOTPRepo(), newMockChallengeRepo(), newTestAuthSvc(), slog.Default()).
+		WithWebAuthn(waRepo, "example.com", "Test", []string{"https://example.com"})
+
+	assert.True(t, svc.HasEnrolledMFA(context.Background(), "t1", "user-1"))
+	assert.False(t, svc.HasEnrolledMFA(context.Background(), "t1", "nonexistent"))
+}
+
+func TestBeginWebAuthnRegistration_NotConfigured(t *testing.T) {
+	svc := NewService(newMockTOTPRepo(), newMockChallengeRepo(), newTestAuthSvc(), slog.Default())
+
+	_, appErr := svc.BeginWebAuthnRegistration(context.Background(), WebAuthnRegisterRequest{
+		Subject: "user-1", TenantID: "t1",
+	})
+
+	require.NotNil(t, appErr)
+	assert.Equal(t, apperrors.ErrBadRequest, appErr.Code)
+	assert.Contains(t, appErr.Error(), "not configured")
+}
+
+func TestBeginWebAuthnRegistration_MissingSubject(t *testing.T) {
+	svc := NewService(newMockTOTPRepo(), newMockChallengeRepo(), newTestAuthSvc(), slog.Default()).
+		WithWebAuthn(newMockWebAuthnRepo(), "localhost", "Test", []string{"http://localhost"})
+
+	_, appErr := svc.BeginWebAuthnRegistration(context.Background(), WebAuthnRegisterRequest{
+		TenantID: "t1",
+	})
+
+	require.NotNil(t, appErr)
+	assert.Equal(t, apperrors.ErrBadRequest, appErr.Code)
+}
+
+func TestBeginWebAuthnRegistration_Success(t *testing.T) {
+	svc := NewService(newMockTOTPRepo(), newMockChallengeRepo(), newTestAuthSvc(), slog.Default()).
+		WithWebAuthn(newMockWebAuthnRepo(), "localhost", "Test", []string{"http://localhost:8080"})
+
+	resp, appErr := svc.BeginWebAuthnRegistration(context.Background(), WebAuthnRegisterRequest{
+		Subject: "user-1", TenantID: "t1", DisplayName: "Test User",
+	})
+
+	require.Nil(t, appErr)
+	assert.NotEmpty(t, resp)
+	// Verify it contains session_id and options
+	var parsed map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(resp, &parsed))
+	assert.Contains(t, string(parsed["session_id"]), "")
+	assert.NotEmpty(t, parsed["options"])
+}
+
+func TestFinishWebAuthnRegistration_NotConfigured(t *testing.T) {
+	svc := NewService(newMockTOTPRepo(), newMockChallengeRepo(), newTestAuthSvc(), slog.Default())
+
+	appErr := svc.FinishWebAuthnRegistration(context.Background(), WebAuthnRegisterFinishRequest{
+		Subject: "user-1", TenantID: "t1",
+	})
+
+	require.NotNil(t, appErr)
+	assert.Equal(t, apperrors.ErrBadRequest, appErr.Code)
+}
+
+func TestFinishWebAuthnRegistration_MissingSubject(t *testing.T) {
+	svc := NewService(newMockTOTPRepo(), newMockChallengeRepo(), newTestAuthSvc(), slog.Default()).
+		WithWebAuthn(newMockWebAuthnRepo(), "localhost", "Test", []string{"http://localhost"})
+
+	appErr := svc.FinishWebAuthnRegistration(context.Background(), WebAuthnRegisterFinishRequest{
+		TenantID: "t1",
+	})
+
+	require.NotNil(t, appErr)
+	assert.Equal(t, apperrors.ErrBadRequest, appErr.Code)
+}
+
+func TestFinishWebAuthnRegistration_InvalidResponse(t *testing.T) {
+	svc := NewService(newMockTOTPRepo(), newMockChallengeRepo(), newTestAuthSvc(), slog.Default()).
+		WithWebAuthn(newMockWebAuthnRepo(), "localhost", "Test", []string{"http://localhost"})
+
+	appErr := svc.FinishWebAuthnRegistration(context.Background(), WebAuthnRegisterFinishRequest{
+		Subject: "user-1", TenantID: "t1", Response: []byte("not json"),
+	})
+
+	require.NotNil(t, appErr)
+	assert.Equal(t, apperrors.ErrBadRequest, appErr.Code)
+}
+
+func TestFinishWebAuthnRegistration_SessionNotFound(t *testing.T) {
+	svc := NewService(newMockTOTPRepo(), newMockChallengeRepo(), newTestAuthSvc(), slog.Default()).
+		WithWebAuthn(newMockWebAuthnRepo(), "localhost", "Test", []string{"http://localhost"})
+
+	appErr := svc.FinishWebAuthnRegistration(context.Background(), WebAuthnRegisterFinishRequest{
+		Subject: "user-1", TenantID: "t1",
+		Response: []byte(`{"session_id":"nonexistent","response":{}}`),
+	})
+
+	require.NotNil(t, appErr)
+	assert.Equal(t, apperrors.ErrNotFound, appErr.Code)
+}
+
+func TestBeginWebAuthnLogin_NotConfigured(t *testing.T) {
+	svc := NewService(newMockTOTPRepo(), newMockChallengeRepo(), newTestAuthSvc(), slog.Default())
+
+	_, appErr := svc.BeginWebAuthnLogin(context.Background(), WebAuthnLoginRequest{
+		Subject: "user-1", TenantID: "t1",
+	})
+
+	require.NotNil(t, appErr)
+	assert.Equal(t, apperrors.ErrBadRequest, appErr.Code)
+}
+
+func TestBeginWebAuthnLogin_MissingSubject(t *testing.T) {
+	svc := NewService(newMockTOTPRepo(), newMockChallengeRepo(), newTestAuthSvc(), slog.Default()).
+		WithWebAuthn(newMockWebAuthnRepo(), "localhost", "Test", []string{"http://localhost"})
+
+	_, appErr := svc.BeginWebAuthnLogin(context.Background(), WebAuthnLoginRequest{
+		TenantID: "t1",
+	})
+
+	require.NotNil(t, appErr)
+	assert.Equal(t, apperrors.ErrBadRequest, appErr.Code)
+}
+
+func TestBeginWebAuthnLogin_NoCredentials(t *testing.T) {
+	svc := NewService(newMockTOTPRepo(), newMockChallengeRepo(), newTestAuthSvc(), slog.Default()).
+		WithWebAuthn(newMockWebAuthnRepo(), "localhost", "Test", []string{"http://localhost:8080"})
+
+	_, appErr := svc.BeginWebAuthnLogin(context.Background(), WebAuthnLoginRequest{
+		Subject: "user-1", TenantID: "t1",
+	})
+
+	require.NotNil(t, appErr)
+	assert.Equal(t, apperrors.ErrNotFound, appErr.Code)
+	assert.Contains(t, appErr.Error(), "no WebAuthn credentials")
+}
+
+func TestVerifyMFA_WebAuthn_NotConfigured(t *testing.T) {
+	challengeRepo := newMockChallengeRepo()
+	challengeRepo.challenges["ch1"] = domainmfa.MFAChallenge{
+		ID: "ch1", Subject: "user-1", TenantID: "t1",
+		ExpiresAt: time.Now().UTC().Add(5 * time.Minute),
+	}
+
+	svc := NewService(newMockTOTPRepo(), challengeRepo, newTestAuthSvc(), slog.Default())
+
+	_, appErr := svc.VerifyMFA(context.Background(), MFAVerifyRequest{
+		ChallengeID: "ch1", Method: "webauthn", Code: "{}",
+	})
+
+	require.NotNil(t, appErr)
+	assert.Equal(t, apperrors.ErrBadRequest, appErr.Code)
+}
+
+func TestNewWebAuthn(t *testing.T) {
+	svc := NewService(newMockTOTPRepo(), newMockChallengeRepo(), newTestAuthSvc(), slog.Default()).
+		WithWebAuthn(newMockWebAuthnRepo(), "localhost", "Test", []string{"http://localhost:8080"})
+
+	w, appErr := svc.newWebAuthn()
+	require.Nil(t, appErr)
+	assert.NotNil(t, w)
+}
+
+func TestBuildWebAuthnUser_NoCredentials(t *testing.T) {
+	svc := NewService(newMockTOTPRepo(), newMockChallengeRepo(), newTestAuthSvc(), slog.Default()).
+		WithWebAuthn(newMockWebAuthnRepo(), "localhost", "Test", []string{"http://localhost"})
+
+	user, appErr := svc.buildWebAuthnUser(context.Background(), "t1", "user-1", "Test User")
+	require.Nil(t, appErr)
+	assert.Equal(t, []byte("user-1"), user.WebAuthnID())
+	assert.Equal(t, "user-1", user.WebAuthnName())
+	assert.Equal(t, "Test User", user.WebAuthnDisplayName())
+	assert.Empty(t, user.WebAuthnCredentials())
+}
+
+func TestFinishWebAuthnRegistration_ExpiredSession(t *testing.T) {
+	challengeRepo := newMockChallengeRepo()
+	// Store an expired challenge
+	challengeRepo.challenges["session-1"] = domainmfa.MFAChallenge{
+		ID:        "session-1",
+		Subject:   "user-1",
+		TenantID:  "t1",
+		Methods:   []string{"webauthn"},
+		ExpiresAt: time.Now().UTC().Add(-5 * time.Minute), // expired
+		Nonce:     `{"session":{},"subject":"user-1","tenant_id":"t1"}`,
+	}
+
+	svc := NewService(newMockTOTPRepo(), challengeRepo, newTestAuthSvc(), slog.Default()).
+		WithWebAuthn(newMockWebAuthnRepo(), "localhost", "Test", []string{"http://localhost:8080"})
+
+	appErr := svc.FinishWebAuthnRegistration(context.Background(), WebAuthnRegisterFinishRequest{
+		Subject:  "user-1",
+		TenantID: "t1",
+		Response: []byte(`{"session_id":"session-1","response":{}}`),
+	})
+
+	require.NotNil(t, appErr)
+	assert.Equal(t, apperrors.ErrExpiredCode, appErr.Code)
+}
+
+func TestFinishWebAuthnRegistration_MissingSessionID(t *testing.T) {
+	svc := NewService(newMockTOTPRepo(), newMockChallengeRepo(), newTestAuthSvc(), slog.Default()).
+		WithWebAuthn(newMockWebAuthnRepo(), "localhost", "Test", []string{"http://localhost:8080"})
+
+	appErr := svc.FinishWebAuthnRegistration(context.Background(), WebAuthnRegisterFinishRequest{
+		Subject:  "user-1",
+		TenantID: "t1",
+		Response: []byte(`{"session_id":"","response":{}}`),
+	})
+
+	require.NotNil(t, appErr)
+	assert.Equal(t, apperrors.ErrBadRequest, appErr.Code)
+}
+
+func TestFinishWebAuthnLogin_NotConfigured(t *testing.T) {
+	svc := NewService(newMockTOTPRepo(), newMockChallengeRepo(), newTestAuthSvc(), slog.Default())
+
+	appErr := svc.FinishWebAuthnLogin(context.Background(), WebAuthnLoginFinishRequest{
+		ChallengeID: "s1",
+		Response:  []byte("{}"),
+	})
+
+	require.NotNil(t, appErr)
+	assert.Equal(t, apperrors.ErrBadRequest, appErr.Code)
+}
+
+func TestFinishWebAuthnLogin_SessionNotFound(t *testing.T) {
+	svc := NewService(newMockTOTPRepo(), newMockChallengeRepo(), newTestAuthSvc(), slog.Default()).
+		WithWebAuthn(newMockWebAuthnRepo(), "localhost", "Test", []string{"http://localhost:8080"})
+
+	appErr := svc.FinishWebAuthnLogin(context.Background(), WebAuthnLoginFinishRequest{
+		ChallengeID: "nonexistent",
+		Response:  []byte("{}"),
+	})
+
+	require.NotNil(t, appErr)
+	assert.Equal(t, apperrors.ErrNotFound, appErr.Code)
+}
+
+func TestFinishWebAuthnLogin_ExpiredSession(t *testing.T) {
+	challengeRepo := newMockChallengeRepo()
+	challengeRepo.challenges["s1"] = domainmfa.MFAChallenge{
+		ID:        "s1",
+		Subject:   "user-1",
+		TenantID:  "t1",
+		ExpiresAt: time.Now().UTC().Add(-5 * time.Minute),
+		Nonce:     `{"session":{},"subject":"user-1","tenant_id":"t1"}`,
+	}
+
+	svc := NewService(newMockTOTPRepo(), challengeRepo, newTestAuthSvc(), slog.Default()).
+		WithWebAuthn(newMockWebAuthnRepo(), "localhost", "Test", []string{"http://localhost:8080"})
+
+	appErr := svc.FinishWebAuthnLogin(context.Background(), WebAuthnLoginFinishRequest{
+		ChallengeID: "s1",
+		Response:  []byte("{}"),
+	})
+
+	require.NotNil(t, appErr)
+	assert.Equal(t, apperrors.ErrExpiredCode, appErr.Code)
+}
+
+func TestVerifyMFAWebAuthn_NotConfigured(t *testing.T) {
+	svc := NewService(newMockTOTPRepo(), newMockChallengeRepo(), newTestAuthSvc(), slog.Default())
+
+	challenge := domainmfa.MFAChallenge{
+		ID: "ch1", Subject: "user-1", TenantID: "t1",
+		ExpiresAt: time.Now().UTC().Add(5 * time.Minute),
+	}
+
+	appErr := svc.VerifyMFAWebAuthn(context.Background(), challenge, []byte("{}"))
+
+	require.NotNil(t, appErr)
+	assert.Equal(t, apperrors.ErrBadRequest, appErr.Code)
+}
+
+func TestVerifyMFAWebAuthn_NoCredentials(t *testing.T) {
+	svc := NewService(newMockTOTPRepo(), newMockChallengeRepo(), newTestAuthSvc(), slog.Default()).
+		WithWebAuthn(newMockWebAuthnRepo(), "localhost", "Test", []string{"http://localhost:8080"})
+
+	challenge := domainmfa.MFAChallenge{
+		ID: "ch1", Subject: "user-1", TenantID: "t1",
+		ExpiresAt: time.Now().UTC().Add(5 * time.Minute),
+	}
+
+	appErr := svc.VerifyMFAWebAuthn(context.Background(), challenge, []byte("{}"))
+
+	require.NotNil(t, appErr)
+	assert.Equal(t, apperrors.ErrBadRequest, appErr.Code)
+	assert.Contains(t, appErr.Error(), "no WebAuthn credentials")
+}
+
+func TestBeginWebAuthnLogin_WithCredentials(t *testing.T) {
+	waRepo := newMockWebAuthnRepo()
+	waRepo.creds["c1"] = domainmfa.WebAuthnCredential{
+		ID: "c1", Subject: "user-1", TenantID: "t1",
+		CredentialID: []byte("cred-id-1"), PublicKey: []byte("pub-key"),
+		SignCount: 0,
+	}
+
+	svc := NewService(newMockTOTPRepo(), newMockChallengeRepo(), newTestAuthSvc(), slog.Default()).
+		WithWebAuthn(waRepo, "localhost", "Test", []string{"http://localhost:8080"})
+
+	resp, appErr := svc.BeginWebAuthnLogin(context.Background(), WebAuthnLoginRequest{
+		Subject: "user-1", TenantID: "t1",
+	})
+
+	require.Nil(t, appErr)
+	// Response is JSON with challenge_id and options
+	var parsed map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(resp, &parsed))
+	assert.NotEmpty(t, parsed["challenge_id"])
+	assert.NotEmpty(t, parsed["options"])
+}
+
+func TestFinishWebAuthnLogin_MissingChallengeID(t *testing.T) {
+	svc := NewService(newMockTOTPRepo(), newMockChallengeRepo(), newTestAuthSvc(), slog.Default()).
+		WithWebAuthn(newMockWebAuthnRepo(), "localhost", "Test", []string{"http://localhost:8080"})
+
+	appErr := svc.FinishWebAuthnLogin(context.Background(), WebAuthnLoginFinishRequest{
+		ChallengeID: "",
+		Response:    []byte("{}"),
+	})
+
+	require.NotNil(t, appErr)
+	assert.Equal(t, apperrors.ErrBadRequest, appErr.Code)
+}
+
+func TestBuildWebAuthnUser_WithCredentials(t *testing.T) {
+	waRepo := newMockWebAuthnRepo()
+	waRepo.creds["c1"] = domainmfa.WebAuthnCredential{
+		ID: "c1", Subject: "user-1", TenantID: "t1",
+		CredentialID: []byte("cred-id"), PublicKey: []byte("pub-key"),
+		SignCount: 5,
+	}
+
+	svc := NewService(newMockTOTPRepo(), newMockChallengeRepo(), newTestAuthSvc(), slog.Default()).
+		WithWebAuthn(waRepo, "localhost", "Test", []string{"http://localhost"})
+
+	user, appErr := svc.buildWebAuthnUser(context.Background(), "t1", "user-1", "")
+	require.Nil(t, appErr)
+	assert.Len(t, user.WebAuthnCredentials(), 1)
+	assert.Equal(t, "user-1", user.WebAuthnDisplayName()) // falls back to subject
 }

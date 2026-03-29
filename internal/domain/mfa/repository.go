@@ -17,3 +17,12 @@ type ChallengeRepository interface {
 	MarkVerified(ctx context.Context, id string) error
 	Delete(ctx context.Context, id string) error
 }
+
+// WebAuthnRepository is the port interface for WebAuthn credential persistence.
+type WebAuthnRepository interface {
+	Store(ctx context.Context, cred WebAuthnCredential) error
+	GetBySubject(ctx context.Context, tenantID, subject string) ([]WebAuthnCredential, error)
+	GetByCredentialID(ctx context.Context, credentialID []byte) (WebAuthnCredential, error)
+	UpdateSignCount(ctx context.Context, id string, signCount uint32) error
+	Delete(ctx context.Context, id string) error
+}

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/authcore/internal/application/jwks"
 	"github.com/authcore/internal/domain/jwk"
@@ -31,6 +32,8 @@ func (m *mockJWKRepo) GetAllPublic(ctx context.Context, tenantID string) ([]jwk.
 	return nil, nil
 }
 func (m *mockJWKRepo) Deactivate(_ context.Context, _ string) error { return nil }
+func (m *mockJWKRepo) GetAllActiveTenantIDs(_ context.Context) ([]string, error) { return nil, nil }
+func (m *mockJWKRepo) DeleteInactive(_ context.Context, _ time.Time) (int64, error) { return 0, nil }
 
 type mockJWKGenerator struct{}
 

@@ -38,21 +38,22 @@ AuthCore follows **Hexagonal Architecture** (Ports & Adapters):
 ├──────────────────────────────────────────────────────────────┤
 │                    Application Layer                          │
 │  Services: auth, client, discovery, jwks, mfa, rbac,         │
-│            provider, social, tenant, user, audit              │
+│            provider, social, tenant, user, audit, cleanup     │
 ├──────────────────────────────────────────────────────────────┤
 │                      Domain Layer                             │
 │  Entities: User, Session, Tenant, Client, KeyPair, Token,    │
 │            Claims, IdentityProvider, ExternalIdentity,        │
-│            TOTPEnrollment, MFAChallenge, RefreshToken,        │
-│            DeviceCode, AuthorizationCode, OTP, Role, AuditEvent│
+│            TOTPEnrollment, MFAChallenge, WebAuthnCredential,  │
+│            RefreshToken, DeviceCode, AuthorizationCode, OTP,  │
+│            Role, AuditEvent                                   │
 │  Ports: Repository, Generator, Converter, Signer,            │
 │         OAuthClient, UserValidator, PasswordHasher,           │
 │         SecretHasher, TokenBlacklist                          │
 ├──────────────────────────────────────────────────────────────┤
 │                     Adapter Layer                             │
 │  Crypto: RSA/EC keygen, JWT signing, bcrypt, AES-256-GCM     │
-│  Cache: 19 in-memory repos (dev/fallback)                    │
-│  Postgres: 7 repos + auto-migration runner (11 SQL files)    │
+│  Cache: 20 in-memory repos (dev/fallback)                    │
+│  Postgres: 7 repos + auto-migration runner (12 SQL files)    │
 │  Redis: 7 repos (session, code, device, blacklist, state, OTP)│
 │  Email: SMTP + console senders                               │
 │  SMS: Twilio + console senders                               │
@@ -738,9 +739,14 @@ make clean           # Remove build artifacts
 - Multi-tenant architecture with per-tenant key isolation
 - Social login with 6 provider types (Google, GitHub, Microsoft, Apple, generic OIDC/OAuth2)
 - TOTP MFA with per-tenant policy enforcement
+- WebAuthn/FIDO2 MFA (hardware keys, biometrics) via go-webauthn library
 - RBAC (roles, permissions, wildcard matching, embedded in JWT claims)
 - Client registry with scope enforcement on OAuth flows
 - Token lifecycle (refresh rotation with replay detection, revocation, introspection)
+- Automatic refresh token cleanup (background service, configurable retention)
+- Automatic signing key rotation (configurable interval, default 90 days)
+- ID token decode from social login providers (JWKS signature validation)
+- Apple Sign In JWT client_secret generation (ES256)
 - Rate limiting (20 req/min per IP sliding window on auth endpoints)
 - Encryption at rest (AES-256-GCM with configurable key)
 - Audit logging (25+ event types with query API)
@@ -749,10 +755,10 @@ make clean           # Remove build artifacts
 - CORS middleware with configurable origins
 - Admin API authentication (API key)
 - Postgres (7 repos) + Redis (7 repos) + in-memory fallback
-- Auto-migration runner (11 SQL files)
+- Auto-migration runner (12 SQL files)
 - Structured logging with environment-aware levels
 - Docker deployment (~15MB image)
-- E2E tests (Docker testcontainers + in-memory variants)
+- E2E tests (131 subtests: auth flows, RBAC, MFA, multi-tenant isolation, OIDC, CORS)
 - Go SDK (embeddable library)
 - Wrapper SDKs: Java, .NET, Node.js, Python
 
@@ -761,12 +767,11 @@ make clean           # Remove build artifacts
 | Priority | Item | Description |
 |----------|------|-------------|
 | High | SAML 2.0 | Enterprise SSO requirement (3-4 weeks) |
-| High | WebAuthn/FIDO2 | Hardware key / biometric MFA (2 weeks) |
 | Medium | Postgres RBAC repos | Currently in-memory; need Postgres persistence |
 | Medium | Audit event auto-wiring | Wire audit events into all services automatically |
 | Medium | Security headers | HSTS, CSP, X-Content-Type-Options |
 | Low | LDAP | Direct AD bind (Azure AD OIDC covers most cases) |
-| Low | Admin UI | Separate SPA recommended over built-in |
+| Low | Admin UI | Separate SPA repo (authcore-admin) |
 | Low | JWE (encrypted tokens) | RFC 7516 |
 | External | Security audit | Penetration test ($5K-30K) |
 
@@ -785,8 +790,8 @@ make clean           # Remove build artifacts
 | HOTP (RFC 4226) | Implemented (base for TOTP) |
 | JWT (RFC 7519) | Implemented (RS256, ES256) |
 | OIDC UserInfo (RFC 5765) | Implemented |
+| WebAuthn / FIDO2 | Implemented |
 | SAML 2.0 | Not implemented |
-| WebAuthn / FIDO2 | Not implemented |
 | JWE (RFC 7516) | Not implemented |
 
 ---

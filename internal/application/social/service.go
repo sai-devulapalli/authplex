@@ -139,9 +139,9 @@ func (s *Service) HandleCallback(ctx context.Context, req CallbackRequest) (auth
 		tokenURL = config.TokenEndpoint
 	}
 
-	// Exchange code for tokens
-	tokenResp, exchangeErr := s.oauthClient.ExchangeCode(ctx, tokenURL, req.Code, s.callbackURL,
-		provider.ClientID, string(provider.ClientSecret))
+	// Exchange code for tokens (with provider-specific config for Apple JWT etc.)
+	tokenResp, exchangeErr := s.oauthClient.ExchangeCodeWithConfig(ctx, tokenURL, req.Code, s.callbackURL,
+		provider.ClientID, string(provider.ClientSecret), provider.ExtraConfig)
 	if exchangeErr != nil {
 		return auth.AuthorizeResponse{}, apperrors.Wrap(apperrors.ErrInternal, "token exchange with provider failed", exchangeErr)
 	}
@@ -159,9 +159,19 @@ func (s *Service) HandleCallback(ctx context.Context, req CallbackRequest) (auth
 		}
 	}
 
+	// Decode id_token for OIDC providers when userinfo didn't yield a subject
 	if userInfo.Subject == "" && tokenResp.IDToken != "" {
-		// TODO: decode id_token to extract subject for OIDC providers
-		userInfo.Subject = "unknown"
+		if provider.DiscoveryURL != "" {
+			config, err := s.oauthClient.FetchOIDCDiscovery(ctx, provider.DiscoveryURL)
+			if err == nil && config.JWKSURI != "" {
+				idInfo, decErr := s.oauthClient.DecodeIDToken(ctx, tokenResp.IDToken, config.JWKSURI)
+				if decErr != nil {
+					s.logger.Warn("failed to decode id_token", "error", decErr)
+				} else {
+					userInfo = idInfo
+				}
+			}
+		}
 	}
 
 	if userInfo.Subject == "" {

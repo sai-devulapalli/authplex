@@ -1,6 +1,9 @@
 package jwk
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // Repository is the port interface for JWK key pair persistence.
 type Repository interface {
@@ -8,4 +11,6 @@ type Repository interface {
 	GetActive(ctx context.Context, tenantID string) (KeyPair, error)
 	GetAllPublic(ctx context.Context, tenantID string) ([]KeyPair, error)
 	Deactivate(ctx context.Context, keyID string) error
+	GetAllActiveTenantIDs(ctx context.Context) ([]string, error)
+	DeleteInactive(ctx context.Context, olderThan time.Time) (int64, error)
 }

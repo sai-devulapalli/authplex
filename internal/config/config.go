@@ -28,7 +28,11 @@ type Config struct {
 	SMSAccountID   string             `env:"AUTHCORE_SMS_ACCOUNT_ID"  envDefault:""`
 	SMSAuthToken   string             `env:"AUTHCORE_SMS_AUTH_TOKEN"  envDefault:""`
 	SMSFromNumber  string             `env:"AUTHCORE_SMS_FROM_NUMBER" envDefault:""`
-	EncryptionKey  string             `env:"AUTHCORE_ENCRYPTION_KEY"  envDefault:""`
+	EncryptionKey    string             `env:"AUTHCORE_ENCRYPTION_KEY"    envDefault:""`
+	KeyRotationDays  int                `env:"AUTHCORE_KEY_ROTATION_DAYS" envDefault:"90"`
+	WebAuthnRPID      string            `env:"AUTHCORE_WEBAUTHN_RP_ID"      envDefault:"localhost"`
+	WebAuthnRPName    string            `env:"AUTHCORE_WEBAUTHN_RP_NAME"    envDefault:"AuthCore"`
+	WebAuthnRPOrigins string            `env:"AUTHCORE_WEBAUTHN_RP_ORIGINS" envDefault:"http://localhost:8080"`
 }
 
 // TenantMode determines how tenants are resolved from incoming requests.

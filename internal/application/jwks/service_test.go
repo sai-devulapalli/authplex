@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/authcore/internal/domain/jwk"
 	"github.com/authcore/internal/domain/tenant"
@@ -49,6 +50,9 @@ func (m *mockRepo) Deactivate(ctx context.Context, keyID string) error {
 	}
 	return nil
 }
+
+func (m *mockRepo) GetAllActiveTenantIDs(_ context.Context) ([]string, error) { return nil, nil }
+func (m *mockRepo) DeleteInactive(_ context.Context, _ time.Time) (int64, error) { return 0, nil }
 
 // --- Mock Generator ---
 

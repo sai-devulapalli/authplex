@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/authcore/internal/domain/jwk"
 	apperrors "github.com/authcore/pkg/sdk/errors"
@@ -59,6 +60,37 @@ func (r *InMemoryJWKRepository) Deactivate(_ context.Context, keyID string) erro
 		return apperrors.New(apperrors.ErrNotFound, "key pair not found")
 	}
 	kp.Active = false
+	now := time.Now().UTC()
+	kp.ExpiresAt = &now
 	r.keys[keyID] = kp
 	return nil
+}
+
+func (r *InMemoryJWKRepository) GetAllActiveTenantIDs(_ context.Context) ([]string, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	seen := make(map[string]bool)
+	for _, kp := range r.keys {
+		if kp.Active {
+			seen[kp.TenantID] = true
+		}
+	}
+	result := make([]string, 0, len(seen))
+	for id := range seen {
+		result = append(result, id)
+	}
+	return result, nil
+}
+
+func (r *InMemoryJWKRepository) DeleteInactive(_ context.Context, olderThan time.Time) (int64, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var count int64
+	for id, kp := range r.keys {
+		if !kp.Active && kp.ExpiresAt != nil && kp.ExpiresAt.Before(olderThan) {
+			delete(r.keys, id)
+			count++
+		}
+	}
+	return count, nil
 }

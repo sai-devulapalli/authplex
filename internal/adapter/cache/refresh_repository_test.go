@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/authcore/internal/domain/token"
 	"github.com/stretchr/testify/assert"
@@ -62,4 +63,35 @@ func TestRefreshRepo_RevokeFamily(t *testing.T) {
 	assert.True(t, rt2.IsRevoked())
 	rt3, _ := repo.GetByToken(ctx, "rt-3")
 	assert.False(t, rt3.IsRevoked())
+}
+
+func TestRefreshRepo_DeleteExpiredAndRevoked(t *testing.T) {
+	repo := NewInMemoryRefreshRepository()
+	ctx := context.Background()
+
+	past := time.Now().UTC().Add(-48 * time.Hour)
+	future := time.Now().UTC().Add(48 * time.Hour)
+	oldRevoke := time.Now().UTC().Add(-72 * time.Hour)
+
+	// Expired token
+	repo.Store(ctx, token.RefreshToken{Token: "expired", ExpiresAt: past, FamilyID: "f1"}) //nolint:errcheck
+	// Active token
+	repo.Store(ctx, token.RefreshToken{Token: "active", ExpiresAt: future, FamilyID: "f2"}) //nolint:errcheck
+	// Old revoked token (revoked 72 hours ago — manually set RevokedAt)
+	rt := token.RefreshToken{Token: "revoked-old", ExpiresAt: future, FamilyID: "f3", RevokedAt: &oldRevoke}
+	repo.Store(ctx, rt) //nolint:errcheck
+
+	cutoff := time.Now().UTC().Add(-24 * time.Hour) // older than 24 hours
+	count, err := repo.DeleteExpiredAndRevoked(ctx, cutoff)
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), count) // expired + old revoked
+
+	_, err = repo.GetByToken(ctx, "expired")
+	assert.Error(t, err, "expired token should be deleted")
+
+	_, err = repo.GetByToken(ctx, "revoked-old")
+	assert.Error(t, err, "old revoked token should be deleted")
+
+	_, err = repo.GetByToken(ctx, "active")
+	assert.NoError(t, err, "active token should remain")
 }

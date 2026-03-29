@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/authcore/internal/application/auth"
 	clientsvc "github.com/authcore/internal/application/client"
@@ -51,6 +52,8 @@ func (m *mockAuthJWKRepo) GetAllPublic(_ context.Context, _ string) ([]jwk.KeyPa
 	return nil, nil
 }
 func (m *mockAuthJWKRepo) Deactivate(_ context.Context, _ string) error { return nil }
+func (m *mockAuthJWKRepo) GetAllActiveTenantIDs(_ context.Context) ([]string, error) { return nil, nil }
+func (m *mockAuthJWKRepo) DeleteInactive(_ context.Context, _ time.Time) (int64, error) { return 0, nil }
 
 type mockAuthGen struct{}
 

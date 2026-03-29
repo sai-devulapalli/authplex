@@ -73,3 +73,13 @@ func (r *RefreshTokenRepository) RevokeFamily(ctx context.Context, familyID stri
 	}
 	return nil
 }
+
+func (r *RefreshTokenRepository) DeleteExpiredAndRevoked(ctx context.Context, olderThan time.Time) (int64, error) {
+	query := `DELETE FROM refresh_tokens WHERE (revoked_at IS NOT NULL AND revoked_at < $1) OR (expires_at < $1)`
+	result, err := r.db.ExecContext(ctx, query, olderThan)
+	if err != nil {
+		return 0, apperrors.Wrap(apperrors.ErrInternal, "failed to cleanup refresh tokens", err)
+	}
+	n, _ := result.RowsAffected()
+	return n, nil
+}
