@@ -21,6 +21,7 @@ import (
 	"github.com/authcore/internal/adapter/postgres"
 	adaptredis "github.com/authcore/internal/adapter/redis"
 	adaptsms "github.com/authcore/internal/adapter/sms"
+	adminsvc "github.com/authcore/internal/application/admin"
 	"github.com/authcore/internal/application/auth"
 	"github.com/authcore/internal/application/cleanup"
 	clientsvc "github.com/authcore/internal/application/client"
@@ -30,6 +31,7 @@ import (
 	providersvc "github.com/authcore/internal/application/provider"
 	auditsvc "github.com/authcore/internal/application/audit"
 	rbacsvc "github.com/authcore/internal/application/rbac"
+	domainadmin "github.com/authcore/internal/domain/admin"
 	domainaudit "github.com/authcore/internal/domain/audit"
 	"github.com/authcore/internal/application/social"
 	tenantsvc "github.com/authcore/internal/application/tenant"
@@ -88,6 +90,7 @@ type repos struct {
 	role            rbac.RoleRepository
 	assignment      rbac.AssignmentRepository
 	audit           domainaudit.Repository
+	adminUser       domainadmin.AdminUserRepository
 }
 
 // setupInMemoryRepos creates all in-memory repositories (development mode).
@@ -112,6 +115,7 @@ func setupInMemoryRepos() repos {
 		role:       roleRepo,
 		assignment: cache.NewInMemoryAssignmentRepository(roleRepo),
 		audit:      cache.NewInMemoryAuditRepository(),
+		adminUser:  cache.NewInMemoryAdminUserRepository(),
 	}
 }
 
@@ -138,6 +142,7 @@ func setupProdRepos(db *sql.DB, redisClient *adaptredis.Client) repos {
 		role:       roleRepo,
 		assignment: postgres.NewAssignmentRepository(db, roleRepo),
 		audit:      postgres.NewAuditRepository(db),
+		adminUser:  cache.NewInMemoryAdminUserRepository(),
 	}
 }
 
@@ -163,6 +168,7 @@ func setupPostgresRepos(db *sql.DB) repos {
 		role:       roleRepo,
 		assignment: postgres.NewAssignmentRepository(db, roleRepo),
 		audit:      postgres.NewAuditRepository(db),
+		adminUser:  cache.NewInMemoryAdminUserRepository(),
 	}
 }
 
@@ -230,6 +236,9 @@ func setupServerWithRepos(cfg config.Config, log *slog.Logger, r repos) http.Han
 
 	authSvc.WithUserValidator(userService)
 
+	// Admin service
+	adminService := adminsvc.NewService(r.adminUser, hasher, log)
+
 	// Middleware
 	corsMiddleware := middleware.NewCORS(cfg.CORSOrigins)
 	tracingMiddleware := middleware.NewTracing()
@@ -257,6 +266,7 @@ func setupServerWithRepos(cfg config.Config, log *slog.Logger, r repos) http.Han
 	rbacHandler := handler.NewRBACHandler(rbacService)
 	auditHandler := handler.NewAuditHandler(auditService)
 	tenantHandler := handler.NewTenantHandler(tenantSvc)
+	adminHandler := handler.NewAdminHandler(adminService, jwksSvc, jwtSigner, cfg.Issuer, cfg.AdminAPIKey)
 
 	healthRegistry := health.NewRegistry()
 
@@ -310,6 +320,11 @@ func setupServerWithRepos(cfg config.Config, log *slog.Logger, r repos) http.Han
 		authRateLimiter.Middleware(tenantResolver.Middleware(http.HandlerFunc(userHandler.HandleVerifyOTP))))
 	mux.Handle("/password/reset",
 		tenantResolver.Middleware(http.HandlerFunc(userHandler.HandleResetPassword)))
+
+	// Admin routes (no tenant middleware)
+	mux.HandleFunc("/admin/bootstrap", adminHandler.HandleBootstrap)
+	mux.HandleFunc("/admin/login", adminHandler.HandleLogin)
+	mux.Handle("/admin/users", adminAuth.Middleware(http.HandlerFunc(adminHandler.HandleUsers)))
 
 	// Management routes (admin auth required, no tenant middleware)
 	mux.Handle("/tenants", adminAuth.Middleware(http.HandlerFunc(tenantHandler.HandleTenants)))
