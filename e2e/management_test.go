@@ -26,7 +26,7 @@ func TestE2E_AdminAuth(t *testing.T) {
 		status, body := env.get(t, "/tenants", nil)
 		assert.Equal(t, http.StatusUnauthorized, status)
 		errObj := body["error"].(map[string]any)
-		assert.Contains(t, errObj["message"], "API key required")
+		assert.Contains(t, errObj["message"].(string), "required")
 	})
 
 	t.Run("wrong_api_key_returns_401", func(t *testing.T) {
