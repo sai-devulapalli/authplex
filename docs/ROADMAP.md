@@ -1,7 +1,7 @@
 # AuthCore — Product Roadmap
 
 > **Last updated:** 2026-03-29
-> **Current state:** ~262 files | 791 tests | 141 E2E subtests | 80%+ coverage | 46 endpoints | 45 packages
+> **Current state:** ~268 files | 812 tests | 141 E2E + 30 Playwright | 80%+ coverage | 47 endpoints | 45 packages | 17 migrations
 
 ---
 

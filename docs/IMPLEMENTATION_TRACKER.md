@@ -1,7 +1,7 @@
 # AuthCore — Implementation Tracker
 
 > **Last updated:** 2026-03-29
-> **Stats:** ~262 files | 791 test functions | 141 E2E subtests | 80%+ coverage | 46 endpoints | 45 packages
+> **Stats:** ~268 files | 812 test functions | 141 E2E + 30 Playwright | 80%+ coverage | 47 endpoints | 45 packages | 17 migrations
 
 ---
 
@@ -22,7 +22,7 @@
 | 11 | Hexagonal architecture (domain/application/adapter) | Done | All | Strict layer separation throughout |
 | 12 | No panics — graceful failure with Result[T] | Done | All | Zero panic() in production code |
 | 13 | Quality gates: 80% line coverage | Done | All | Threshold at 80%, currently 80%+ |
-| 14 | Test triad: 85% unit, 10% functional, 5% e2e | Done | All | Unit: 791 tests. E2E: 141 subtests across 7 files |
+| 14 | Test triad: 85% unit, 10% functional, 5% e2e | Done | All | Unit: 812 tests. E2E: 141 subtests + 30 Playwright |
 | 15 | E2E with real Postgres + Redis via testcontainers | Done | E2E | Docker testcontainers + comprehensive in-memory E2E suite |
 | 16 | Structured logging (local/staging/prod levels) | Done | 1 | slog-based, env-aware |
 | 17 | No mocks in E2E tests | Done | — | Convention established |
@@ -322,3 +322,10 @@
 | 2026-03-29 | Security: Refresh tokens hashed (SHA-256), rate limiter uses RemoteAddr only |
 | 2026-03-29 | Security: Connection pool configured (25 open, 5 idle, 30min lifetime) |
 | 2026-03-29 | Security: TenantID (tid) claim added to JWTs for signature verification |
+| 2026-03-29 | Production: PII removed from logs, security headers (HSTS/CSP/X-Frame), request ID middleware |
+| 2026-03-29 | Production: Audit log immutability (migration 016), query timeouts (5s) on all 44 Postgres methods |
+| 2026-03-29 | Production: Admin service tests (12), SAML service tests (8) |
+| 2026-03-29 | Production: Prometheus /metrics endpoint, rate limiter goroutine leak fixed |
+| 2026-03-29 | Production: FK constraints (migration 017), consent fields on User, GDPR HardDelete |
+| 2026-03-29 | Production: Feature flags (4 env-var toggles), incident runbook (7 procedures) |
+| 2026-03-29 | **All 10 production readiness dimensions: PASS** |

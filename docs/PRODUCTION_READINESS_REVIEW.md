@@ -219,7 +219,7 @@ Stateless HTTP server (any instance can handle any request). Postgres for persis
 ## 9. CODE QUALITY & MAINTAINABILITY
 
 ### Current State
-791 test functions, 141 E2E subtests. Consistent error handling with `AppError`. Functional options pattern throughout.
+812 test functions, 141 E2E subtests + 30 Playwright. Consistent error handling with `AppError`. Functional options pattern throughout.
 
 ### Gaps
 

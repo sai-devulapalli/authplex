@@ -35,10 +35,10 @@ Each module must pass quality gates before proceeding to next:
 11. GTM: Token Versioning + Postgres RBAC + Audit Wiring + Admin Auth + RLS + SAML ✅
 
 ## Current Stats
-- **~262 Go files** (source + test)
-- **791 test functions** across 45 packages (141 E2E subtests)
+- **~268 Go files** (source + test)
+- **812 test functions** across 45 packages (141 E2E subtests + 30 Playwright)
 - **80%+ line coverage**
-- **46 HTTP endpoints** (OIDC/OAuth + Management + MFA + WebAuthn + SAML + Admin)
+- **47 HTTP endpoints** (OIDC/OAuth + Management + MFA + WebAuthn + SAML + Admin + Metrics)
 
 ## Quality Gates
 - Line coverage >= 80%

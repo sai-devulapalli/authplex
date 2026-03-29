@@ -1,6 +1,6 @@
 # AuthCore vs Alternatives — Detailed Comparison
 
-> **Last updated:** 2026-03-29 | AuthCore: 262 files, 791 tests, 46 endpoints
+> **Last updated:** 2026-03-29 | AuthCore: 268 files, 812 tests, 47 endpoints
 
 ## Overview
 
