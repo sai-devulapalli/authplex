@@ -590,3 +590,117 @@ UI: Hosted UI (customizable CSS) or your own
 | WebAuthn + TOTP + OTP | **AuthCore** or **Keycloak** |
 | Any-language extensibility | **Cognito** (Lambda) |
 | Embeddable library mode | **AuthCore** (Go SDK) or **IdentityServer** (.NET) |
+
+---
+
+## 6. Who Should NOT Use AuthCore
+
+AuthCore is not the right choice for everyone. Here are the scenarios where you should use something else — and what to use instead.
+
+### You need SAML 2.0 today
+
+**Scenario:** Your enterprise customers use Okta, Azure AD, or ADFS and require SAML SSO for employee login. Their IT department won't approve OIDC-only providers.
+
+**Problem:** AuthCore has no SAML support (Tier 2 roadmap — weeks away, not available today).
+
+**Use instead:** Keycloak (full SAML IdP + SP) or Cognito (SAML SP).
+
+---
+
+### You need production auth in under an hour
+
+**Scenario:** You're building an MVP, demo, or hackathon project. You need login working today — not tomorrow. You don't have time to build login/register UI screens.
+
+**Problem:** AuthCore is headless — you must build every UI screen yourself. No hosted login page, no pre-built forms, no redirect-based login flow.
+
+**Use instead:** Auth0 (hosted login page in 10 minutes), Cognito (Hosted UI), or Keycloak (themed login pages out of the box).
+
+---
+
+### You need compliance certifications right now
+
+**Scenario:** Your customer's procurement team requires SOC2 Type II, HIPAA BAA, or FedRAMP certification. They need a signed compliance report before signing the contract.
+
+**Problem:** AuthCore has zero compliance certifications and no security audit history. No CVE track record. Built by a single developer.
+
+**Use instead:** Cognito (SOC2, HIPAA, FedRAMP), Auth0 (SOC2, HIPAA), or Keycloak with Red Hat SSO (FIPS 140-2).
+
+---
+
+### You don't have frontend developers
+
+**Scenario:** Your team is backend-only (Java, .NET, Python). Nobody knows React/Vue/HTML. You need auth but can't build the UI.
+
+**Problem:** Headless = you build the UI. If you can't build forms, buttons, and error handling, AuthCore gives you nothing visible to users.
+
+**Use instead:** Keycloak (full admin console + themed login pages — zero frontend code needed), Cognito (Hosted UI), or Auth0 (Universal Login).
+
+---
+
+### You need LDAP / Active Directory federation
+
+**Scenario:** Your company has 10,000 employees in Active Directory. Users must log in with their corporate AD credentials. No migration — AD is the source of truth.
+
+**Problem:** AuthCore has no LDAP or AD federation. Users must be in AuthCore's database.
+
+**Use instead:** Keycloak (LDAP + AD + Kerberos federation built-in), or Azure AD / Entra ID directly.
+
+---
+
+### You're locked into a non-Go ecosystem
+
+**Scenario:** Your entire platform is Java Spring Boot or .NET. You want auth embedded in your app process, not as a separate service. Your team doesn't know Go.
+
+**Problem:** The embedded Go SDK only works in Go applications. For Java/.NET, AuthCore runs as a separate HTTP service — adding a network hop and operational complexity.
+
+**Use instead:** Spring Security (Java, embedded), IdentityServer/Duende (.NET, embedded), or Keycloak (Java, can run as sidecar).
+
+---
+
+### You need a battle-tested security track record
+
+**Scenario:** You're building for banking, healthcare, or government. Your security team requires an auth solution with published CVE history, penetration test reports, and a dedicated security response team.
+
+**Problem:** AuthCore has zero production deployments, zero published CVEs (because none have been looked for), no penetration test, and a single maintainer.
+
+**Use instead:** Keycloak (10+ years, CNCF, active security team), Auth0 (dedicated security team, bug bounty program), or Cognito (AWS security team).
+
+---
+
+### You need real-time user management UI for non-technical admins
+
+**Scenario:** Your customer success team needs to manage users — reset passwords, lock accounts, view login history — through a polished admin dashboard. They're not developers.
+
+**Problem:** AuthCore's admin UI (`authcore-admin`) is functional but basic. It covers tenant/client/role CRUD and audit logs. There's no user management page, no account lock/unlock, no session viewer, no "reset user password" button.
+
+**Use instead:** Keycloak (polished admin console with full user management), Auth0 (beautiful dashboard), or Cognito (AWS Console).
+
+---
+
+### You need more than 5 social login providers
+
+**Scenario:** Your app needs Facebook, Twitter/X, LinkedIn, WeChat, Line, and Spotify login. Breadth of social providers matters.
+
+**Problem:** AuthCore supports 6 provider types (Google, GitHub, Microsoft, Apple, generic OIDC, generic OAuth2). No Facebook, Twitter, LinkedIn, or regional providers.
+
+**Use instead:** Auth0 (50+ social connections), Keycloak (20+ built-in + custom SPI), or Firebase Auth (broad social support).
+
+---
+
+### Summary: Use AuthCore When...
+
+| Your situation | AuthCore? | Better alternative |
+|---------------|-----------|-------------------|
+| Building custom auth UX for SaaS | **Yes** | — |
+| Need SAML for enterprise customers today | No | Keycloak |
+| Need login page in 1 hour | No | Auth0, Cognito |
+| Need SOC2/HIPAA compliance report | No | Cognito, Auth0 |
+| No frontend developers on team | No | Keycloak |
+| Corporate LDAP/AD is source of truth | No | Keycloak |
+| All-Java or all-.NET shop wanting embedded auth | No | Spring Security, Duende |
+| Bank/government requiring CVE track record | No | Keycloak, Auth0 |
+| Non-technical admins managing users daily | No | Keycloak, Auth0 |
+| Need 20+ social login providers | No | Auth0 |
+| Multi-tenant SaaS, <300MB RAM, custom UX | **Yes** | — |
+| Go team wanting embedded auth library | **Yes** | — |
+| Edge/sidecar deployment (15MB image) | **Yes** | — |
