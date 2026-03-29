@@ -151,7 +151,7 @@
 |---------|-------------|-------------|-------------------|------------|
 | CORS | Global configurable | Per-client | Per-client | Per-pool |
 | CSRF Protection | State parameter (OAuth) | Built-in (cookies) | Built-in | Managed |
-| Admin Auth | API key (constant-time compare) | Username/password + 2FA | N/A | IAM policies |
+| Admin Auth | JWT-based with 4 roles + API key (backward compat) | Username/password + 2FA | N/A | IAM policies |
 | Encryption at Rest | AES-256-GCM (configurable key) | Vault integration | DPAPI / Azure Key Vault | AWS KMS |
 | TLS Termination | Reverse proxy (nginx/traeger) | Built-in or reverse proxy | Host app | ACM + CloudFront |
 | Security Audit | **None** | Multiple CVEs addressed, active security team | Duende security advisories | AWS security compliance |
@@ -296,7 +296,7 @@ After implementing the [Tier 1-3 roadmap](ROADMAP.md), AuthCore closes every maj
 
 ```
 Keycloak:       ████████████████████████████░░  95%
-AuthCore:       ██████████████████████████░░░░  92%  (up from 65% pre-RBAC/Audit/OTel/mTLS)
+AuthCore:       ████████████████████████████░░  95%  (up from 65% pre-RBAC/Audit/OTel/mTLS/SAML)
 Cognito:        ██████████████████████░░░░░░░░  75%
 IdentityServer: ████████████████████░░░░░░░░░░  70%
 

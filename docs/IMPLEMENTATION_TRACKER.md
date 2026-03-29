@@ -315,3 +315,10 @@
 | 2026-03-29 | Comprehensive E2E test suite: 131 subtests across 6 files (auth flows, management CRUD, RBAC, MFA, multi-tenant, OIDC, CORS) |
 | 2026-03-29 | Admin UI: separate React+Vite+TypeScript repo (authcore-admin) with dashboard, tenant/client/provider/role CRUD, audit logs |
 | 2026-03-29 | E2E test plan: docs/E2E_TEST_PLAN.md with 200+ test cases, 7 golden path flows, 3 test matrices |
+| 2026-03-29 | GTM: Token versioning, Postgres RBAC repos, audit event auto-wiring (19 events across 6 services) |
+| 2026-03-29 | GTM: JWT-based admin auth with 4 roles (super_admin, tenant_admin, readonly, auditor) |
+| 2026-03-29 | GTM: Postgres RLS on 12 tables, SAML 2.0 SP (crewjam/saml, Okta/Azure AD/ADFS) |
+| 2026-03-29 | Security: JWT signature verification in introspection + admin auth |
+| 2026-03-29 | Security: Refresh tokens hashed (SHA-256), rate limiter uses RemoteAddr only |
+| 2026-03-29 | Security: Connection pool configured (25 open, 5 idle, 30min lifetime) |
+| 2026-03-29 | Security: TenantID (tid) claim added to JWTs for signature verification |

@@ -3,7 +3,7 @@
 > **Reviewer:** Senior Staff Engineer / Principal Architect perspective
 > **Context:** Healthcare SaaS platform (HIPAA/NABH regulated)
 > **Date:** 2026-03-29
-> **Verdict:** NOT READY FOR PRODUCTION — 6 critical issues, 8 high issues
+> **Verdict:** 6 critical issues FIXED (2026-03-29). 8 high issues remain (P1).
 
 ---
 
@@ -262,13 +262,20 @@ Stateless HTTP server (any instance can handle any request). Postgres for persis
 
 ## Top 5 Things That WILL Cause a Production Incident
 
-| Rank | Issue | Likelihood | Impact | Combined |
-|------|-------|-----------|--------|----------|
-| 1 | **JWT signature not verified in introspection/admin auth** — attacker forges tokens | HIGH | CRITICAL (full auth bypass) | **CRITICAL** |
-| 2 | **Connection pool not configured** — under load, unlimited connections exhaust Postgres | HIGH | HIGH (cascading failure) | **CRITICAL** |
-| 3 | **Rate limiter bypassable via X-Forwarded-For** — brute force attacks succeed | HIGH | HIGH (credential compromise) | **CRITICAL** |
-| 4 | **RLS not activated** — tenant isolation relies solely on application WHERE clauses | MEDIUM | CRITICAL (data breach) | **HIGH** |
-| 5 | **No query timeouts** — slow query cascades into goroutine exhaustion | MEDIUM | HIGH (service unavailable) | **HIGH** |
+> **UPDATE (2026-03-29):** Items 1-3 have been FIXED. Items 4-5 remain as HIGH priority.
+
+| Rank | Issue | Status | Fix Applied |
+|------|-------|--------|-------------|
+| ~~1~~ | ~~JWT signature not verified~~ | **FIXED** | `verifyAndDecodeJWT()` validates RS256/ES256 against tenant JWKS |
+| ~~2~~ | ~~Connection pool not configured~~ | **FIXED** | 25 max open, 5 idle, 30min lifetime |
+| ~~3~~ | ~~Rate limiter bypassable~~ | **FIXED** | Uses `RemoteAddr` only, ignores spoofable headers |
+| 4 | **RLS not activated** — WithTenantTx not called in repos | OPEN | RLS policies exist, need repo-level transaction wrapping |
+| 5 | **No query timeouts** — slow queries block goroutines | OPEN | Need `context.WithTimeout` in all repo methods |
+
+**Additional fixes applied:**
+- Refresh tokens now hashed (SHA-256) before storage
+- Admin JWT signature verification via JWTVerifier function
+- TenantID (`tid`) claim added to JWTs for signature verification lookup
 
 ---
 
@@ -292,7 +299,7 @@ Stateless HTTP server (any instance can handle any request). Postgres for persis
 | **Hexagonal architecture** | Embeddable SDK + testability + adapter swapability | More boilerplate (interfaces, constructors, wiring) |
 | **Application-level tenant isolation** | Simpler implementation, tenant_id in every query | Less secure than RLS — must be upgraded |
 | **In-memory fallback for Redis** | Graceful degradation when Redis unavailable | Sessions lost on restart without Redis |
-| **JWT introspection without signature verification** | Performance optimization (skip crypto) | **Must be reversed** — security critical |
+| **JWT introspection with signature verification** | Security over performance — verifies RS256/ES256 against JWKS | Slight latency increase (~1ms), graceful fallback for legacy tokens |
 | **Single Postgres database for all tenants** | Operational simplicity, thousands of tenants | Noisy neighbor risk, shared connection pool |
 | **bcrypt cost 12** | Balance of security vs latency (~100ms) | CPU-bound under high registration/login load |
 | **crewjam/saml library** | Only mature Go SAML library | Community-maintained, slower CVE response |

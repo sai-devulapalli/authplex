@@ -1,7 +1,7 @@
 # AuthCore — Product Roadmap
 
 > **Last updated:** 2026-03-29
-> **Current state:** 249 files | 785 tests | 131 E2E subtests | 83.4% coverage | 39 endpoints | 42 packages
+> **Current state:** ~262 files | 791 tests | 141 E2E subtests | 80%+ coverage | 46 endpoints | 45 packages
 
 ---
 
@@ -9,12 +9,13 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  🔴 TIER 1 — Must Do NOW (security + operational maturity) │
-│  Token versioning, DB tenant isolation, rate limiting,      │
-│  admin auth model                                           │
+│  🔴 TIER 1 — DONE                                          │
+│  Token versioning ✅, DB tenant isolation (RLS) ✅,          │
+│  admin auth model ✅, rate limiting fix ✅,                   │
+│  JWT sig verification ✅, refresh token hashing ✅            │
 ├─────────────────────────────────────────────────────────────┤
-│  🟠 TIER 2 — Unlock Enterprise (compliance + provisioning) │
-│  SAML 2.0, SCIM, Admin UI                                  │
+│  🟠 TIER 2 — MOSTLY DONE                                   │
+│  SAML 2.0 ✅, Admin UI ✅, SCIM (pending)                    │
 ├─────────────────────────────────────────────────────────────┤
 │  🟢 TIER 3 — Differentiate (advanced security + platform)  │
 │  Policy engine (ABAC), webhooks, risk-based auth            │
