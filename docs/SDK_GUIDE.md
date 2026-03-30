@@ -964,6 +964,139 @@ http.ListenAndServe(":8080", mux)
 
 ---
 
+## 16. AI Agent / M2M Authentication
+
+### Create an Agent Client (Admin)
+
+<details>
+<summary><b>cURL</b></summary>
+
+```bash
+# Create a confidential client for your AI agent
+curl -X POST http://localhost:8080/tenants/my-tenant/clients \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ADMIN_API_KEY" \
+  -d '{
+    "client_name": "My AI Agent",
+    "client_type": "confidential",
+    "is_agent": true,
+    "redirect_uris": [],
+    "allowed_scopes": ["data:read", "data:write"],
+    "grant_types": ["client_credentials"]
+  }'
+# Response: {"data": {"client_id": "...", "client_secret": "..." }}
+```
+</details>
+
+### Generate Static API Key
+
+<details>
+<summary><b>cURL</b></summary>
+
+```bash
+# Generate a non-expiring API key for simpler integrations
+curl -X POST http://localhost:8080/tenants/my-tenant/clients/AGENT_CLIENT_ID/api-key \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ADMIN_API_KEY"
+# Response: {"data": {"api_key": "ac_..."}}
+```
+</details>
+
+### Get Agent JWT (client_credentials)
+
+<details>
+<summary><b>Go</b></summary>
+
+```go
+// Using the embedded SDK
+tokens, err := auth.Auth.ClientCredentials(ctx, clientID, clientSecret, tenantID, "data:read data:write")
+fmt.Printf("Agent Token: %s\n", tokens.AccessToken)
+```
+</details>
+
+<details>
+<summary><b>Java</b></summary>
+
+```java
+// Using the wrapper SDK
+TokenResponse tokens = auth.clientCredentials("data:read data:write");
+System.out.println("Agent Token: " + tokens.getAccessToken());
+
+// Or with Spring Boot AgentAuthService (auto-caches + refreshes)
+@Autowired AgentAuthService agentAuth;
+String token = agentAuth.getAccessToken();
+```
+</details>
+
+<details>
+<summary><b>C#</b></summary>
+
+```csharp
+var tokens = await auth.ClientCredentialsAsync("data:read data:write");
+Console.WriteLine($"Agent Token: {tokens.AccessToken}");
+```
+</details>
+
+<details>
+<summary><b>Node.js</b></summary>
+
+```javascript
+const tokens = await auth.clientCredentials('data:read data:write');
+console.log('Agent Token:', tokens.access_token);
+```
+</details>
+
+<details>
+<summary><b>Python</b></summary>
+
+```python
+tokens = auth.client_credentials("data:read data:write")
+print(f"Agent Token: {tokens.access_token}")
+```
+</details>
+
+<details>
+<summary><b>cURL</b></summary>
+
+```bash
+curl -X POST http://localhost:8080/token \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -H "X-Tenant-ID: my-tenant" \
+  -d "grant_type=client_credentials&client_id=AGENT_CLIENT_ID&client_secret=AGENT_SECRET&scope=data:read data:write"
+```
+</details>
+
+### Endpoint-Scoped Tokens
+
+When an agent client is configured with endpoint restrictions, the issued JWT includes an `endpoints` claim:
+
+```json
+{
+  "sub": "agent-client-id",
+  "iss": "https://auth.myapp.com",
+  "aud": "my-tenant",
+  "scope": "data:read data:write",
+  "endpoints": ["/api/data/*", "/api/reports/*"],
+  "exp": 1711234567
+}
+```
+
+Your consuming API should validate the `endpoints` claim against the request path:
+
+```go
+// Example: middleware to enforce endpoint scoping
+claims := authcore.ClaimsFromContext(r.Context())
+if len(claims.Endpoints) > 0 {
+    allowed := false
+    for _, pattern := range claims.Endpoints {
+        if matchPath(pattern, r.URL.Path) { allowed = true; break }
+    }
+    if !allowed { http.Error(w, "forbidden", 403); return }
+}
+```
+
+---
+
 ## SDK Repositories
 
 | Language | Repository |

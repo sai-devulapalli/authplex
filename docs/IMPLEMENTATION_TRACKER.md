@@ -329,3 +329,4 @@
 | 2026-03-29 | Production: FK constraints (migration 017), consent fields on User, GDPR HardDelete |
 | 2026-03-29 | Production: Feature flags (4 env-var toggles), incident runbook (7 procedures) |
 | 2026-03-29 | **All 10 production readiness dimensions: PASS** |
+| 2026-03-30 | AI agent auth: non-expiring API keys, agent rate limits, activity tracking, endpoint scoping |

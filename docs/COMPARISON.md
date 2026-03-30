@@ -195,6 +195,7 @@ AuthCore and Keycloak scale best cost-wise. Cognito becomes expensive at scale. 
 | Custom Social Provider | OAuthClient interface | Identity Provider SPI | IAuthenticationHandler | Custom OIDC |
 | Custom MFA | TOTPRepository interface | Authenticator SPI | Custom | Custom challenge Lambda |
 | Custom Theme/UI | N/A (headless) | FreeMarker templates | Razor Pages | Hosted UI CSS |
+| M2M / Agent Auth | client_credentials + API keys + endpoint scoping | client_credentials | client_credentials | client_credentials (IAM roles) |
 | Webhooks | **Roadmap Tier 3** | Admin events + SPI | No | Lambda triggers |
 | Plugin System | Go interfaces (compile-time) | Java SPI (runtime, hot-deploy) | .NET DI (compile-time) | Lambda (runtime) |
 

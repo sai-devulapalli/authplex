@@ -766,6 +766,7 @@ make clean           # Remove build artifacts
 - Docker deployment (~15MB image)
 - E2E tests (141 subtests: auth flows, RBAC, MFA, SAML, admin auth, multi-tenant, OIDC)
 - Go SDK (embeddable library)
+- AI agent / M2M authentication (client_credentials, static API keys, endpoint scoping, activity tracking)
 - Wrapper SDKs: Java, .NET, Node.js, Python
 
 ### What's Pending
