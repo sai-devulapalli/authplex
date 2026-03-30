@@ -39,6 +39,13 @@ type TenantSettings struct {
 	AllowedOrigins           []string `json:"allowed_origins"`            // CORS per tenant
 	MaxLoginAttempts         int      `json:"max_login_attempts"`         // 0 = unlimited
 	LockoutDuration          int      `json:"lockout_duration"`           // seconds
+
+	// SMTP per-tenant override (empty = use global config)
+	SMTPHost     string `json:"smtp_host"`
+	SMTPPort     int    `json:"smtp_port"`
+	SMTPUsername string `json:"smtp_username"`
+	SMTPPassword string `json:"smtp_password"`
+	SMTPFrom     string `json:"smtp_from"`
 }
 
 // DefaultSettings returns the default tenant settings.

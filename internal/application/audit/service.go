@@ -9,19 +9,26 @@ import (
 	"strings"
 	"time"
 
+	webhooksvc "github.com/authcore/internal/application/webhook"
 	domainaudit "github.com/authcore/internal/domain/audit"
 	apperrors "github.com/authcore/pkg/sdk/errors"
 )
 
 // Service provides audit logging operations.
 type Service struct {
-	repo   domainaudit.Repository
-	logger *slog.Logger
+	repo       domainaudit.Repository
+	logger     *slog.Logger
+	webhookSvc *webhooksvc.Service
 }
 
 // NewService creates a new audit service.
 func NewService(repo domainaudit.Repository, logger *slog.Logger) *Service {
 	return &Service{repo: repo, logger: logger}
+}
+
+// WithWebhooks sets the webhook service for event delivery.
+func (s *Service) WithWebhooks(svc *webhooksvc.Service) {
+	s.webhookSvc = svc
 }
 
 // Log records an audit event.
@@ -50,6 +57,16 @@ func (s *Service) Log(ctx context.Context, tenantID, actorID, actorType string, 
 
 	if err := s.repo.Store(ctx, event); err != nil {
 		s.logger.Error("failed to store audit event", "error", err, "action", action)
+	}
+
+	if s.webhookSvc != nil {
+		go s.webhookSvc.Deliver(ctx, tenantID, string(action), map[string]any{
+			"event":         action,
+			"actor_id":      actorID,
+			"resource_type": resourceType,
+			"resource_id":   resourceID,
+			"timestamp":     time.Now().UTC(),
+		})
 	}
 }
 

@@ -39,6 +39,7 @@ import (
 	mfasvc "github.com/authcore/internal/application/mfa"
 	providersvc "github.com/authcore/internal/application/provider"
 	auditsvc "github.com/authcore/internal/application/audit"
+	webhooksvc "github.com/authcore/internal/application/webhook"
 	rbacsvc "github.com/authcore/internal/application/rbac"
 	domainadmin "github.com/authcore/internal/domain/admin"
 	domainaudit "github.com/authcore/internal/domain/audit"
@@ -56,6 +57,7 @@ import (
 	"github.com/authcore/internal/domain/rbac"
 	"github.com/authcore/internal/domain/tenant"
 	"github.com/authcore/internal/domain/token"
+	"github.com/authcore/internal/domain/webhook"
 	"github.com/authcore/internal/domain/user"
 	"github.com/authcore/pkg/sdk/health"
 	"github.com/authcore/pkg/sdk/httputil"
@@ -102,6 +104,7 @@ type repos struct {
 	assignment      rbac.AssignmentRepository
 	audit           domainaudit.Repository
 	adminUser       domainadmin.AdminUserRepository
+	webhook         webhook.Repository
 }
 
 // setupInMemoryRepos creates all in-memory repositories (development mode).
@@ -127,6 +130,7 @@ func setupInMemoryRepos() repos {
 		assignment: cache.NewInMemoryAssignmentRepository(roleRepo),
 		audit:      cache.NewInMemoryAuditRepository(),
 		adminUser:  cache.NewInMemoryAdminUserRepository(),
+		webhook:    cache.NewInMemoryWebhookRepository(),
 	}
 }
 
@@ -154,6 +158,7 @@ func setupProdRepos(db *sql.DB, redisClient *adaptredis.Client) repos {
 		assignment: postgres.NewAssignmentRepository(db, roleRepo),
 		audit:      postgres.NewAuditRepository(db),
 		adminUser:  cache.NewInMemoryAdminUserRepository(),
+		webhook:    cache.NewInMemoryWebhookRepository(),
 	}
 }
 
@@ -180,6 +185,7 @@ func setupPostgresRepos(db *sql.DB) repos {
 		assignment: postgres.NewAssignmentRepository(db, roleRepo),
 		audit:      postgres.NewAuditRepository(db),
 		adminUser:  cache.NewInMemoryAdminUserRepository(),
+		webhook:    cache.NewInMemoryWebhookRepository(),
 	}
 }
 
@@ -204,7 +210,9 @@ func setupServerWithRepos(cfg config.Config, log *slog.Logger, r repos) http.Han
 		WithDeviceRepo(r.device).
 		WithBlacklist(r.blacklist)
 
+	webhookService := webhooksvc.NewService(r.webhook, log)
 	auditService := auditsvc.NewService(r.audit, log)
+	auditService.WithWebhooks(webhookService)
 
 	clientService := clientsvc.NewService(r.client, hasher, log)
 	clientService.WithAudit(auditService)
@@ -281,6 +289,7 @@ func setupServerWithRepos(cfg config.Config, log *slog.Logger, r repos) http.Han
 	rbacHandler := handler.NewRBACHandler(rbacService)
 	auditHandler := handler.NewAuditHandler(auditService)
 	tenantHandler := handler.NewTenantHandler(tenantSvc)
+	webhookHandler := handler.NewWebhookHandler(webhookService)
 	adminHandler := handler.NewAdminHandler(adminService, jwksSvc, jwtSigner, cfg.Issuer, cfg.AdminAPIKey)
 
 	healthRegistry := health.NewRegistry()
@@ -381,6 +390,14 @@ func setupServerWithRepos(cfg config.Config, log *slog.Logger, r repos) http.Han
 		}
 		if strings.Contains(r.URL.Path, "/users/") && strings.HasSuffix(r.URL.Path, "/roles") {
 			rbacHandler.HandleUserRoles(w, r)
+			return
+		}
+		if strings.Contains(r.URL.Path, "/webhooks") {
+			if strings.Count(r.URL.Path, "/") >= 4 {
+				webhookHandler.HandleWebhook(w, r)
+			} else {
+				webhookHandler.HandleWebhooks(w, r)
+			}
 			return
 		}
 		if strings.Contains(r.URL.Path, "/audit") {
