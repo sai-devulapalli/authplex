@@ -1,7 +1,7 @@
 # AuthCore — Implementation Tracker
 
 > **Last updated:** 2026-03-29
-> **Stats:** ~268 files | 812 test functions | 141 E2E + 30 Playwright | 80%+ coverage | 47 endpoints | 45 packages | 17 migrations
+> **Stats:** ~273 files | 812 test functions | 141 E2E + 30 Playwright | 80%+ coverage | 49 endpoints | 47 packages | 19 migrations
 
 ---
 

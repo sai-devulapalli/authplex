@@ -101,7 +101,7 @@ Each is a potential CVE vector. AuthCore depends on Go's stdlib crypto (maintain
 
 ```
 Full build time:
-  Go:    ~5 seconds (AuthCore, 268 files)
+  Go:    ~5 seconds (AuthCore, 273 files)
   Java:  ~30-60 seconds (Keycloak, thousands of files)
   .NET:  ~10-20 seconds (typical project)
   Rust:  ~2-5 minutes (fresh build)
@@ -192,7 +192,7 @@ Node.js was rejected because auth is **CPU-intensive** (bcrypt hashing, JWT sign
 | Ecosystem maturity | Young for web services | Mature (net/http, database/sql) | Go wins |
 | Hiring | Very hard to find Rust developers | Easy to find Go developers | Go wins |
 
-Rust was tempting for the performance edge but rejected for **development velocity**. AuthCore was built iteratively (12 modules, 268 files, 812 tests) in a short timeframe. Rust's borrow checker and steeper learning curve would have slowed development by 2-3x for marginal performance gains that don't matter in I/O-bound auth workloads.
+Rust was tempting for the performance edge but rejected for **development velocity**. AuthCore was built iteratively (12 modules, 273 files, 812 tests) in a short timeframe. Rust's borrow checker and steeper learning curve would have slowed development by 2-3x for marginal performance gains that don't matter in I/O-bound auth workloads.
 
 **Why not Python?**
 
@@ -216,7 +216,7 @@ Python is excellent for SDKs/clients, not for the server itself.
 | External deps | 3 (env, testify, x/crypto) + go-webauthn |
 | Crypto | 100% stdlib |
 | Concurrency | Goroutines (thousands of concurrent requests, ~4KB each) |
-| Files | 268 Go files, 812 tests |
+| Files | 273 Go files, 812 tests |
 | Coverage | 80%+ coverage + 141 E2E |
 
 Go was chosen because AuthCore needed to be **small enough to be a sidecar, fast enough for auth workloads, simple enough to audit, and safe enough for security-critical code**. No other language satisfies all four constraints simultaneously.
@@ -442,7 +442,7 @@ UI: Hosted UI (customizable CSS) or your own
 | Capability | AuthCore | Keycloak | IdentityServer | Cognito |
 |-----------|----------|----------|----------------|---------|
 | Admin UI | Separate React SPA (authcore-admin) | Beautiful built-in console | Sold separately by Duende | AWS Console |
-| Admin API | REST (47 endpoints, JWT-based admin auth + API key) | REST + Java Client + CLI | **None** | AWS SDK/CLI |
+| Admin API | REST (49 endpoints, JWT-based admin auth + API key) | REST + Java Client + CLI | **None** | AWS SDK/CLI |
 | Admin CLI | **Roadmap** | kcadm.sh (powerful) | dotnet CLI | AWS CLI |
 | Admin auth | API key (JWT-based on roadmap) | Username/password + optional 2FA | N/A | IAM policies |
 | Admin roles | **Roadmap** (super_admin, tenant_admin, readonly, auditor) | Fine-grained admin permissions | N/A | IAM policies |
@@ -506,7 +506,7 @@ UI: Hosted UI (customizable CSS) or your own
 | Custom provider | `OAuthClient` interface | IdP SPI | `IAuthenticationHandler` | OIDC only |
 | Plugin hot-reload | **No** (compile-time) | **Yes** (runtime JAR) | **No** (compile-time) | **Yes** (Lambda) |
 | Extension language | Go only | Java only | C# only | Any (Lambda) |
-| Webhooks | **Roadmap** | Admin events + SPI | **No** | Lambda triggers |
+| Webhooks | HMAC-signed, per-tenant | Admin events + SPI | **No** | Lambda triggers |
 
 **Winner:** Keycloak (hot-deploy Java SPIs, most extension points). Cognito (any language via Lambda).
 

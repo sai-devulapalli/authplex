@@ -10,7 +10,7 @@
 ## 1. ARCHITECTURE & DESIGN
 
 ### Current State
-Hexagonal architecture is **cleanly implemented**. No domain→adapter import violations found. Dependency direction is correct throughout all 45 packages.
+Hexagonal architecture is **cleanly implemented**. No domain→adapter import violations found. Dependency direction is correct throughout all 47 packages.
 
 - Domain layer (`internal/domain/`) — pure Go structs + interfaces, zero infrastructure imports
 - Application layer (`internal/application/`) — orchestration only, depends on domain ports

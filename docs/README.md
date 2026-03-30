@@ -761,7 +761,7 @@ make clean           # Remove build artifacts
 - mTLS for M2M client certificate verification
 - CORS middleware with configurable origins
 - Postgres (10 repos) + Redis (7 repos) + in-memory fallback
-- Auto-migration runner (15 SQL files)
+- Auto-migration runner (19 SQL files)
 - Structured logging with environment-aware levels
 - Docker deployment (~15MB image)
 - E2E tests (141 subtests: auth flows, RBAC, MFA, SAML, admin auth, multi-tenant, OIDC)
@@ -781,7 +781,7 @@ See [ROADMAP.md](ROADMAP.md) for the full tiered implementation plan.
 | Medium | Admin CLI tool | `authcore tenant create --domain example.com` |
 | Medium | Security headers | HSTS, CSP, X-Content-Type-Options |
 | **Tier 3** | Policy engine (ABAC) | Attribute-based access control beyond RBAC |
-| **Tier 3** | Webhooks | Event streaming to external systems |
+| ~~Tier 3~~ | ~~Webhooks~~ | **DONE** — HMAC-signed, per-tenant subscriptions |
 | **Tier 3** | Risk-based auth | Adaptive MFA triggered by risk scoring |
 | Low | LDAP | Direct AD bind (Azure AD OIDC covers most) |
 | Low | JWE (encrypted tokens) | RFC 7516 |
@@ -795,6 +795,10 @@ See [ROADMAP.md](ROADMAP.md) for the full tiered implementation plan.
 - SAML 2.0 (crewjam/saml, 3 endpoints, Okta/Azure AD support)
 - Postgres RBAC repos (persistent roles + assignments)
 - Audit event auto-wiring (19 events across 6 services)
+- Webhooks per tenant (HMAC-SHA256 signed delivery)
+- Per-tenant SMTP configuration
+- AI agent auth (API keys, endpoint scoping, activity tracking)
+- Per-tenant settings (MFA, TTLs, password policy, CORS, rate limits)
 
 ### Standards Compliance
 
