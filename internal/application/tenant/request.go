@@ -12,6 +12,8 @@ type CreateTenantRequest struct {
 
 // UpdateTenantRequest is the DTO for updating an existing tenant.
 type UpdateTenantRequest struct {
-	Domain string `json:"domain,omitempty"`
-	Issuer string `json:"issuer,omitempty"`
+	Domain   string                 `json:"domain,omitempty"`
+	Issuer   string                 `json:"issuer,omitempty"`
+	MFA      *tenant.MFAPolicy      `json:"mfa,omitempty"`
+	Settings *tenant.TenantSettings `json:"settings,omitempty"`
 }

@@ -75,6 +75,12 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateTenantRequest
 	if req.Issuer != "" {
 		t.Issuer = req.Issuer
 	}
+	if req.MFA != nil {
+		t.MFA = *req.MFA
+	}
+	if req.Settings != nil {
+		t.Settings = *req.Settings
+	}
 
 	if err := s.repo.Update(ctx, t); err != nil {
 		return tenant.Tenant{}, apperrors.Wrap(apperrors.ErrInternal, "failed to update tenant", err)

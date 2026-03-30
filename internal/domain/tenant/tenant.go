@@ -27,6 +27,31 @@ func (p MFAPolicy) IsMFARequired() bool {
 	return p.Required == "required"
 }
 
+// TenantSettings holds per-tenant configuration.
+type TenantSettings struct {
+	SessionTTL               int      `json:"session_ttl"`                // seconds, default 86400 (24h)
+	AccessTokenTTL           int      `json:"access_token_ttl"`           // seconds, default 3600 (1h)
+	RefreshTokenTTL          int      `json:"refresh_token_ttl"`          // seconds, default 2592000 (30d)
+	PasswordMinLength        int      `json:"password_min_length"`        // default 8
+	PasswordRequireUppercase bool     `json:"password_require_uppercase"`
+	PasswordRequireNumber    bool     `json:"password_require_number"`
+	PasswordRequireSpecial   bool     `json:"password_require_special"`
+	AllowedOrigins           []string `json:"allowed_origins"`            // CORS per tenant
+	MaxLoginAttempts         int      `json:"max_login_attempts"`         // 0 = unlimited
+	LockoutDuration          int      `json:"lockout_duration"`           // seconds
+}
+
+// DefaultSettings returns the default tenant settings.
+func DefaultSettings() TenantSettings {
+	return TenantSettings{
+		SessionTTL:        86400,
+		AccessTokenTTL:    3600,
+		RefreshTokenTTL:   2592000,
+		PasswordMinLength: 8,
+		MaxLoginAttempts:  0,
+	}
+}
+
 // Tenant represents an isolated identity provider tenant.
 type Tenant struct {
 	ID            string
@@ -34,6 +59,7 @@ type Tenant struct {
 	Issuer        string
 	SigningConfig SigningConfig
 	MFA           MFAPolicy
+	Settings      TenantSettings
 	TokenVersion  int
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
@@ -72,6 +98,7 @@ func NewTenant(id, domain, issuer string, alg Algorithm) (Tenant, error) {
 		SigningConfig: SigningConfig{
 			Algorithm: alg,
 		},
+		Settings:     DefaultSettings(),
 		TokenVersion: 1,
 		CreatedAt:    now,
 		UpdatedAt:    now,

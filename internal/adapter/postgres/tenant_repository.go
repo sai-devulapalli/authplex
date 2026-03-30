@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"time"
 
 	"github.com/authcore/internal/domain/tenant"
@@ -25,14 +26,20 @@ var _ tenant.Repository = (*TenantRepository)(nil)
 func (r *TenantRepository) Create(ctx context.Context, t tenant.Tenant) error {
 	ctx, cancel := WithQueryTimeout(ctx)
 	defer cancel()
-	query := `INSERT INTO tenants (id, domain, issuer, algorithm, active_key_id, token_version, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
+	settingsJSON, err := json.Marshal(t.Settings)
+	if err != nil {
+		return apperrors.Wrap(apperrors.ErrInternal, "failed to marshal tenant settings", err)
+	}
 
-	_, err := r.db.ExecContext(ctx, query,
+	query := `INSERT INTO tenants (id, domain, issuer, algorithm, active_key_id, token_version, settings, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`
+
+	_, err = r.db.ExecContext(ctx, query,
 		t.ID, t.Domain, t.Issuer,
 		string(t.SigningConfig.Algorithm),
 		t.SigningConfig.ActiveKeyID,
 		t.TokenVersion,
+		settingsJSON,
 		t.CreatedAt, t.UpdatedAt,
 	)
 	if err != nil {
@@ -45,7 +52,7 @@ func (r *TenantRepository) Create(ctx context.Context, t tenant.Tenant) error {
 func (r *TenantRepository) GetByID(ctx context.Context, id string) (tenant.Tenant, error) {
 	ctx, cancel := WithQueryTimeout(ctx)
 	defer cancel()
-	query := `SELECT id, domain, issuer, algorithm, active_key_id, token_version, created_at, updated_at, deleted_at
+	query := `SELECT id, domain, issuer, algorithm, active_key_id, token_version, settings, created_at, updated_at, deleted_at
 		FROM tenants WHERE id = $1`
 
 	return r.scanTenant(r.db.QueryRowContext(ctx, query, id))
@@ -55,7 +62,7 @@ func (r *TenantRepository) GetByID(ctx context.Context, id string) (tenant.Tenan
 func (r *TenantRepository) GetByDomain(ctx context.Context, domain string) (tenant.Tenant, error) {
 	ctx, cancel := WithQueryTimeout(ctx)
 	defer cancel()
-	query := `SELECT id, domain, issuer, algorithm, active_key_id, token_version, created_at, updated_at, deleted_at
+	query := `SELECT id, domain, issuer, algorithm, active_key_id, token_version, settings, created_at, updated_at, deleted_at
 		FROM tenants WHERE domain = $1 AND deleted_at IS NULL`
 
 	return r.scanTenant(r.db.QueryRowContext(ctx, query, domain))
@@ -65,13 +72,19 @@ func (r *TenantRepository) GetByDomain(ctx context.Context, domain string) (tena
 func (r *TenantRepository) Update(ctx context.Context, t tenant.Tenant) error {
 	ctx, cancel := WithQueryTimeout(ctx)
 	defer cancel()
-	query := `UPDATE tenants SET domain = $1, issuer = $2, algorithm = $3, active_key_id = $4, updated_at = $5
-		WHERE id = $6 AND deleted_at IS NULL`
+	settingsJSON, err := json.Marshal(t.Settings)
+	if err != nil {
+		return apperrors.Wrap(apperrors.ErrInternal, "failed to marshal tenant settings", err)
+	}
+
+	query := `UPDATE tenants SET domain = $1, issuer = $2, algorithm = $3, active_key_id = $4, settings = $5, updated_at = $6
+		WHERE id = $7 AND deleted_at IS NULL`
 
 	result, err := r.db.ExecContext(ctx, query,
 		t.Domain, t.Issuer,
 		string(t.SigningConfig.Algorithm),
 		t.SigningConfig.ActiveKeyID,
+		settingsJSON,
 		time.Now().UTC(), t.ID,
 	)
 	if err != nil {
@@ -138,7 +151,7 @@ func (r *TenantRepository) List(ctx context.Context, offset, limit int) ([]tenan
 		return nil, 0, apperrors.Wrap(apperrors.ErrInternal, "failed to count tenants", err)
 	}
 
-	query := `SELECT id, domain, issuer, algorithm, active_key_id, token_version, created_at, updated_at, deleted_at
+	query := `SELECT id, domain, issuer, algorithm, active_key_id, token_version, settings, created_at, updated_at, deleted_at
 		FROM tenants WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT $1 OFFSET $2`
 
 	rows, err := r.db.QueryContext(ctx, query, limit, offset)
@@ -167,8 +180,9 @@ func (r *TenantRepository) scanTenant(row *sql.Row) (tenant.Tenant, error) {
 	var t tenant.Tenant
 	var alg, activeKeyID string
 	var deletedAt *time.Time
+	var settingsRaw []byte
 
-	err := row.Scan(&t.ID, &t.Domain, &t.Issuer, &alg, &activeKeyID, &t.TokenVersion, &t.CreatedAt, &t.UpdatedAt, &deletedAt)
+	err := row.Scan(&t.ID, &t.Domain, &t.Issuer, &alg, &activeKeyID, &t.TokenVersion, &settingsRaw, &t.CreatedAt, &t.UpdatedAt, &deletedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return tenant.Tenant{}, apperrors.New(apperrors.ErrNotFound, "tenant not found")
@@ -181,6 +195,11 @@ func (r *TenantRepository) scanTenant(row *sql.Row) (tenant.Tenant, error) {
 		ActiveKeyID: activeKeyID,
 	}
 	t.DeletedAt = deletedAt
+	if len(settingsRaw) > 0 {
+		if err := json.Unmarshal(settingsRaw, &t.Settings); err != nil {
+			return tenant.Tenant{}, apperrors.Wrap(apperrors.ErrInternal, "failed to unmarshal tenant settings", err)
+		}
+	}
 	return t, nil
 }
 
@@ -192,8 +211,9 @@ func (r *TenantRepository) scanRow(row scannable) (tenant.Tenant, error) {
 	var t tenant.Tenant
 	var alg, activeKeyID string
 	var deletedAt *time.Time
+	var settingsRaw []byte
 
-	err := row.Scan(&t.ID, &t.Domain, &t.Issuer, &alg, &activeKeyID, &t.TokenVersion, &t.CreatedAt, &t.UpdatedAt, &deletedAt)
+	err := row.Scan(&t.ID, &t.Domain, &t.Issuer, &alg, &activeKeyID, &t.TokenVersion, &settingsRaw, &t.CreatedAt, &t.UpdatedAt, &deletedAt)
 	if err != nil {
 		return tenant.Tenant{}, apperrors.Wrap(apperrors.ErrInternal, "failed to scan tenant row", err)
 	}
@@ -203,5 +223,10 @@ func (r *TenantRepository) scanRow(row scannable) (tenant.Tenant, error) {
 		ActiveKeyID: activeKeyID,
 	}
 	t.DeletedAt = deletedAt
+	if len(settingsRaw) > 0 {
+		if err := json.Unmarshal(settingsRaw, &t.Settings); err != nil {
+			return tenant.Tenant{}, apperrors.Wrap(apperrors.ErrInternal, "failed to unmarshal tenant settings", err)
+		}
+	}
 	return t, nil
 }
